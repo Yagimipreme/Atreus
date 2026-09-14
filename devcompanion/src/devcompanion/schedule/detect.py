@@ -28,11 +28,15 @@ class Param:
 
 @dataclass(frozen=True)
 class Signature:
-    qualname: str        # Class.method or function
+    qualname: str        # Class.method, function, or outer.inner for a nested function
     name: str
     params: tuple[Param, ...]
     line: int            # 1-based def line
-    is_method: bool
+    is_method: bool      # defined directly in a class body
+    local: bool = False  # defined inside a function: callable only from within that function
+    enclosing: str | None = None   # the qualname of the nearest enclosing function, when local
+    owner: str | None = None       # the class, when a method
+    end_line: int = 0              # 1-based last line of the definition
 
     def render(self) -> str:
         return f"{self.qualname}({', '.join(p.render() for p in self.params)})"
@@ -99,23 +103,30 @@ def signatures(src: bytes) -> tuple[list[Signature], bool]:
     tree = parse(src)
     sigs: list[Signature] = []
 
-    def walk(n: Node, scope: list[str]):
+    def walk(n: Node, scope: list[tuple[str, str]]):
         for c in n.children:
             if c.type == "class_definition":
                 nm = c.child_by_field_name("name")
                 body = c.child_by_field_name("body")
                 if nm is not None and body is not None:
-                    walk(body, scope + [_text(nm, src)])
+                    walk(body, scope + [(_text(nm, src), "class")])
             elif c.type == "function_definition":
                 nm = c.child_by_field_name("name")
                 ps = c.child_by_field_name("parameters")
                 if nm is not None and ps is not None:
                     name = _text(nm, src)
-                    sigs.append(Signature(".".join(scope + [name]), name, _params(ps, src),
-                                          c.start_point[0] + 1, bool(scope)))
+                    names = [s for s, _ in scope]
+                    functions = [i for i, (_, kind) in enumerate(scope) if kind == "function"]
+                    in_class = bool(scope) and scope[-1][1] == "class"
+                    sigs.append(Signature(
+                        ".".join(names + [name]), name, _params(ps, src), c.start_point[0] + 1, in_class,
+                        local=bool(functions),
+                        enclosing=".".join(names[:functions[-1] + 1]) if functions else None,
+                        owner=scope[-1][0] if in_class else None,
+                        end_line=c.end_point[0] + 1))
                 body = c.child_by_field_name("body")
                 if body is not None:
-                    walk(body, scope + [_text(nm, src)] if nm is not None else scope)
+                    walk(body, scope + [(_text(nm, src), "function")] if nm is not None else scope)
             elif c.type == "decorated_definition":
                 walk(c, scope)
             elif c.type in ("block", "if_statement", "try_statement", "else_clause", "except_clause"):

@@ -1,6 +1,6 @@
 # devcompanion workflow check — 2026-09-14
 
-**54 checks passed; 0 failed; 0 integration gaps reproduced.**
+**55 checks passed; 0 failed; 0 integration gaps reproduced.**
 
 Rerun from the project root: `.venv/bin/python scripts/check-workflow.py`.
 The harness creates fresh disposable Git projects and stops its watcher on exit.
@@ -16,11 +16,16 @@ without stealing focus*, *Panel toggles closed*) asserted the pane that the UI p
 the rows that replace them are named below. Pipes inside an observation are written `/` so the
 table stays a table: `str / None` is `str | None`.
 
-Artifacts: `/tmp/devcompanion-check-5_lctb4a`
+Rerun later the same day after the adapter's debounce became per buffer: one row added, *Typing in
+another buffer does not cancel a pending edit*. Before the fix the same scenario delivered only
+`buffer_saved` and `session_end` — the edit to `calc.py` never reached the inbox, because typing in
+a scratch buffer inside the debounce window replaced its pending send.
+
+Artifacts: `/tmp/devcompanion-check-xcdouuu8`
 
 | Result | Scenario | Observation |
 |---|---|---|
-| PASS | Existing unit suite | 104 passed in 4.44s |
+| PASS | Existing unit suite | 126 passed in 6.65s |
 | PASS | Canonical text agrees across Lua, Python and disk | 11/11 fixture cases hash identically in the adapter, the engine, and the file Neovim writes |
 | PASS | Baseline | No breaking finding for unchanged committed files |
 | PASS | Breaking signature | 2 call site(s): 2 break, 0 unsure, 0 fit |
@@ -37,6 +42,7 @@ Artifacts: `/tmp/devcompanion-check-5_lctb4a`
 | PASS | Removed function | 2 call site(s): 2 break, 0 unsure, 0 fit |
 | PASS | Rapid submissions coalesce | {"submitted": 3, "coalesced": 1, "ran": 2} |
 | PASS | Buffers open before :CompanionStart are announced | announced ['calc.py', 'client.py']; the modified one is sent as an unsaved buffer, the clean one seeds the baseline, and buffers outside the workspace are skipped |
+| PASS | Typing in another buffer does not cancel a pending edit | inbox ['buffer_saved', 'buffer_changed']; the edit to calc.py is sent although a scratch buffer changed inside its debounce window |
 | PASS | Lua emits unsaved text | Actual Neovim TextChanged event contains edited text |
 | PASS | Unsaved ingestion | 2 call site(s): 2 break, 0 unsure, 0 fit — while calc.py on disk still holds the original signature |
 | PASS | Unsaved analysis says so | unsaved buffer; the file on disk still holds the previous version |

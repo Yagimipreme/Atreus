@@ -22,6 +22,7 @@ what make a model's sentence checkable.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 
@@ -180,6 +181,14 @@ class Problem:
     @property
     def facts(self) -> dict[str, str]:
         return self.readings[0].facts
+
+    @property
+    def key(self) -> str:
+        """The problem's identity at its place -- the lead message's rule, line and wording -- so
+        a fix proposed for it can find it again when the findings are rebuilt."""
+        lead = self.lead
+        body = f"{lead.get('code') or ''}|{lead.get('line')}|{flat(lead.get('message'))}"
+        return hashlib.sha1(body.encode()).hexdigest()[:10]
 
 
 def _span(d: dict) -> tuple[tuple[int, int], tuple[int, int]]:

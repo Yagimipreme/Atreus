@@ -148,6 +148,18 @@ Explicit developer ask, bypasses the passive cadence.
 
     {…,"kind":"request","what":"explain_diagnostic","path":"src/config.py","line":88}
 
+### `action_result`
+
+What became of an edit the developer was offered. Recorded by the engine, never acted on. The
+adapter either:
+- applied it to a buffer,
+- refused it, because the buffer no longer held the bytes the edit was computed from, or
+- had it rejected by the developer.
+
+    {…,"kind":"action_result","action":"fix","finding_id":"f-6d8fca8287","path":"fields.py","status":"applied"}
+
+`status` is `applied | refused_stale | declined`.
+
 ## 2. Requests (engine -> adapter)
 
 The engine needs the editor for two things: LSP queries and buffer text it does not have.
@@ -183,6 +195,7 @@ adapter renders in file order.
 | `revision` | object | `{path: "disk"\|"editor"}` — whether each input was the saved file or an unsaved buffer |
 | `outcome` | object | present on `test_result`: `{status, counts}` — `status` is `passed`, `failed`, `unavailable`, `timeout`, `none` or `skipped`; `counts` holds what pytest reported, e.g. `{"passed": 68, "skipped": 2}`, and is empty when it reported none |
 | `saved_revision_only` | bool | present on `test_result`: this evidence cannot speak for unsaved buffers |
+| `fix` | object | present on `diagnostic_context` when the gate checked a proposed fix for exactly this revision: `{id, verdict: "checked", covers: [line], warnings: [message], edits: [{line, end_line, text}], diff, profile, depends_on: {path: sha}}`. One fix can resolve several problems: each of them carries the same `id`, `covers` lists their lines, and the adapter offers the fix once. Each edit replaces lines `line` to `end_line - 1`, 1-based; `end_line == line` inserts. The adapter applies edits to the buffer only while the buffer's canonical hash equals `depends_on`, and refuses otherwise. `warnings` are the checker's messages for warnings the fix introduced. `checked` never means correct ([fix/check.py](../src/devcompanion/fix/check.py)) |
 | `snapshot_id` | string | the immutable input this was derived from |
 | `created_ts` | float | |
 
@@ -216,6 +229,9 @@ Example:
   on between engine writes.
 - `basis` is always visible: observed and inferred must be distinguishable at a glance.
 - `action` is offered, never applied. Applying sends a `request` and the engine re-checks freshness.
+- A `fix` is offered, never applied on its own. On the developer's `a`, the adapter compares
+  `fix.depends_on` with the live buffer's canonical hash, applies the edits to the buffer (unsaved,
+  one undo step) or refuses, and reports an `action_result`.
 
 ## 4. Engine liveness
 

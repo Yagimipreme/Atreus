@@ -1,7 +1,7 @@
 # Edits and approval
 
-Status: design, 2026-09-14. Not implemented. Scope agreed in conversation; the shape below is
-a proposal.
+Status: design, 2026-09-14. Scope agreed in conversation. Build-order steps 1 and 2 are built for
+checked fixes in the file being edited (*Built* below); the rest is a proposal.
 
 The companion may now propose edits: new or changed tests, documentation, a fix in the file
 being edited, or a change in another file that does not exist yet. This document is how that
@@ -100,6 +100,25 @@ derived from**. A doc edit that cannot say what evidence produced it is not offe
 
 Step 2 is the minimum that makes the whole loop judgeable. Everything after it is the same
 machinery aimed somewhere else.
+
+## Built: checked fixes in the current file
+
+Pass 7, verified in a real Neovim.
+
+**The fix travels inside its finding.** It carries its edits and the revision it was checked on
+(`fix`, [contract.md](contract.md)), so applying needs no round trip to the engine. `outbox.jsonl`
+still has no writer, because nothing here needs the engine to push.
+
+**The pieces the design names:**
+
+| Piece | Where |
+|---|---|
+| Freshness refusal | `nvim/lua/companion/review.lua` `fresh()`: `fix.depends_on` against the live buffer's canonical hash |
+| Buffer apply | `apply()`: edits bottom-up, one undo step, buffer left unsaved |
+| The record | an `action_result` event: `applied`, `refused_stale` or `declined` |
+| The pane | `✓ fix checked`, `✓ I can fix N of these · f review`, and a diff float with `a` apply, `r` reject, `n` next, `q` close |
+
+`A` is not bound: agent delegation does not exist yet.
 
 ## Open
 

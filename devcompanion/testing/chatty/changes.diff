@@ -1,0 +1,134 @@
+# Cases for :Chatty summary and :Chatty commit -- the same diffs serve both. A case runs from its
+# `# %%` line to the next; `# expect:` is shown to you beside the reply and never sent.
+
+# %% hidden-default-change
+# expect: a refactor that also drops the default timeout from 30 s to 5 s; `timeout=` callers break (now `timeout_s`); `fetch_many` gains a timeout
+diff --git a/src/shop/http.py b/src/shop/http.py
+index 66b5a49..f0817e7 100644
+--- a/src/shop/http.py
++++ b/src/shop/http.py
+@@ -1,11 +1,12 @@
+ import urllib.request
+ 
+-
+-def fetch(url, timeout=30):
+-    with urllib.request.urlopen(url, timeout=timeout) as response:
+-        body = response.read()
+-    return body.decode("utf-8")
++DEFAULT_TIMEOUT_S = 5
+ 
+ 
+-def fetch_many(urls):
+-    return [fetch(u) for u in urls]
++def fetch(url, timeout_s=DEFAULT_TIMEOUT_S):
++    with urllib.request.urlopen(url, timeout=timeout_s) as response:
++        return response.read().decode("utf-8")
++
++
++def fetch_many(urls, timeout_s=DEFAULT_TIMEOUT_S):
++    return [fetch(u, timeout_s) for u in urls]
+
+# %% page-off-by-one
+# expect: fixes `page` returning the second page for page 1 (it skipped the first `size` items); page numbers below 1 now raise ValueError
+diff --git a/src/shop/paging.py b/src/shop/paging.py
+index bb0a950..5581839 100644
+--- a/src/shop/paging.py
++++ b/src/shop/paging.py
+@@ -1,6 +1,8 @@
+ def page(items, number, size=20):
+     """Return page `number` (1-based) of `items`."""
+-    start = number * size
++    if number < 1:
++        raise ValueError(f"page numbers start at 1, got {number}")
++    start = (number - 1) * size
+     return items[start:start + size]
+ 
+ 
+
+# %% mixed-concerns
+# expect: two unrelated changes: blocked customers can no longer place orders (PermissionError), and log lines now carry the logger name; the commit body should say they are mixed
+diff --git a/src/shop/log.py b/src/shop/log.py
+index 0240c09..bf966a2 100644
+--- a/src/shop/log.py
++++ b/src/shop/log.py
+@@ -1,6 +1,6 @@
+ import logging
+ 
+-FORMAT = "%(asctime)s %(levelname)s %(message)s"
++FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+ 
+ 
+ def configure(level=logging.INFO):
+diff --git a/src/shop/orders.py b/src/shop/orders.py
+index 1479cc1..e809f5b 100644
+--- a/src/shop/orders.py
++++ b/src/shop/orders.py
+@@ -4,6 +4,8 @@ from shop.models import Order
+ def place_order(cart, customer):
+     if not cart.items:
+         raise ValueError("cart is empty")
++    if customer.is_blocked:
++        raise PermissionError(f"customer {customer.id} is blocked")
+     order = Order(customer=customer, lines=list(cart.items.items()))
+     order.save()
+     return order
+
+# %% pure-rename
+# expect: rename only: `calc` becomes `calculate_total`, its one caller follows; no behaviour change (imports of `calc` elsewhere would break -- the diff cannot show any)
+diff --git a/src/shop/pricing.py b/src/shop/pricing.py
+index f440e9e..ff08c5e 100644
+--- a/src/shop/pricing.py
++++ b/src/shop/pricing.py
+@@ -1,7 +1,7 @@
+-def calc(lines, tax_rate):
++def calculate_total(lines, tax_rate):
+     net = sum(qty * price for qty, price in lines)
+     return round(net * (1 + tax_rate), 2)
+ 
+ 
+ def invoice_total(invoice):
+-    return calc(invoice.lines, invoice.tax_rate)
++    return calculate_total(invoice.lines, invoice.tax_rate)
+
+# %% tests-only
+# expect: adds tests only (first page, partial last page, `page_count` rounding up, page 0 rejected); no production code changes
+diff --git a/tests/test_paging.py b/tests/test_paging.py
+new file mode 100644
+index 0000000..d91d463
+--- /dev/null
++++ b/tests/test_paging.py
+@@ -0,0 +1,20 @@
++import pytest
++
++from shop.paging import page, page_count
++
++
++def test_first_page_starts_at_first_item():
++    assert page(list(range(50)), 1, size=20) == list(range(20))
++
++
++def test_last_page_is_partial():
++    assert page(list(range(50)), 3, size=20) == list(range(40, 50))
++
++
++def test_page_count_rounds_up():
++    assert page_count(list(range(41)), size=20) == 3
++
++
++def test_page_zero_is_rejected():
++    with pytest.raises(ValueError):
++        page([], 0)
+
+# %% narrower-except
+# expect: only a missing file still returns None; malformed JSON and permission errors now reach the caller instead of being silently ignored
+diff --git a/src/shop/config.py b/src/shop/config.py
+index 22243c2..76db4b9 100644
+--- a/src/shop/config.py
++++ b/src/shop/config.py
+@@ -5,5 +5,5 @@ from pathlib import Path
+ def load_overrides(path):
+     try:
+         return json.loads(Path(path).read_text())
+-    except Exception:
++    except FileNotFoundError:
+         return None

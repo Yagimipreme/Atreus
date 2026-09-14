@@ -22,6 +22,8 @@ class Reply:
     prompt_s: float | None = None
     gen_s: float | None = None
     model: str = ""
+    cost_usd: float | None = None   # what a subscription CLI reports the call would cost via the API
+    remote: bool = False
 
 
 SYSTEM = ("You are a quiet coding companion. Given evidence about a code change, write ONE sentence "
@@ -31,11 +33,18 @@ SYSTEM = ("You are a quiet coding companion. Given evidence about a code change,
 def suggest(evidence_text: str, model: str, backend: str = "ollama", base_url: str | None = None,
             timeout_s: float = 30, num_ctx: int = 4096, cpu_only: bool = False,
             keep_alive: str = "30m") -> Reply:
+    return chat(SYSTEM, evidence_text, model, backend, base_url, timeout_s, num_ctx,
+                num_predict=60, cpu_only=cpu_only, keep_alive=keep_alive)
+
+
+def chat(system: str, user: str, model: str, backend: str = "ollama", base_url: str | None = None,
+         timeout_s: float = 30, num_ctx: int = 4096, num_predict: int = 60, cpu_only: bool = False,
+         keep_alive: str = "30m") -> Reply:
     t0 = time.time()
     try:
         if backend == "ollama":
             url = (base_url or "http://127.0.0.1:11434") + "/api/chat"
-            opts = {"num_ctx": num_ctx, "temperature": 0, "num_predict": 60}
+            opts = {"num_ctx": num_ctx, "temperature": 0, "num_predict": num_predict}
             if cpu_only:
                 opts["num_gpu"] = 0
             # Ollama evicts after five minutes by default. Measured on this host, a cold load of
@@ -45,7 +54,7 @@ def suggest(evidence_text: str, model: str, backend: str = "ollama", base_url: s
             # this is an ollama-only concern.
             body = {"model": model, "stream": False, "think": False, "options": opts,
                     "keep_alive": keep_alive,
-                    "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": evidence_text}]}
+                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
             req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=timeout_s) as r:
                 d = json.loads(r.read())
@@ -54,8 +63,8 @@ def suggest(evidence_text: str, model: str, backend: str = "ollama", base_url: s
                          (d.get("prompt_eval_duration") or 0) / 1e9, (d.get("eval_duration") or 0) / 1e9, model)
         else:
             url = (base_url or "http://127.0.0.1:8080") + "/v1/chat/completions"
-            body = {"model": model, "temperature": 0, "max_tokens": 60,
-                    "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": evidence_text}]}
+            body = {"model": model, "temperature": 0, "max_tokens": num_predict,
+                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
             req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=timeout_s) as r:
                 d = json.loads(r.read())

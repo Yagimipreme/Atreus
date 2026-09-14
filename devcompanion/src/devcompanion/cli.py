@@ -9,6 +9,7 @@ import threading
 import time
 from pathlib import Path
 
+from . import instance
 from .engine import Engine
 from .observe import events as ev
 from .observe import fswatch
@@ -22,9 +23,18 @@ def _llm_from_args(a) -> dict | None:
             "cpu_only": a.cpu_only, "keep_alive": a.keep_alive}
 
 
+def _fix_config(a, root: Path):
+    """Checked fixes belong to the model tier: on with --model, off in a deterministic-only run."""
+    if not a.model:
+        return None
+    from . import config
+    return config.load(root, session=_session(a))
+
+
 def cmd_ingest(a):
     """Emit one event for a path (what the Neovim plugin does) and process it synchronously."""
-    eng = Engine(Path(a.root), Path(a.state) if a.state else None, run_tests=not a.no_tests, llm=_llm_from_args(a))
+    eng = Engine(Path(a.root), Path(a.state) if a.state else None, run_tests=not a.no_tests, llm=_llm_from_args(a),
+                 config=_fix_config(a, Path(a.root)))
     for p in a.paths:
         eng.handle_event(ev.Event(kind="buffer_saved", path=str(Path(p).resolve()), source="cli"))
     eng.sched.drain(wait=False)
@@ -54,8 +64,22 @@ def _intake_block(intake: Intake) -> dict:
 
 def cmd_watch(a):
     root = Path(a.root).resolve()
+    state = Path(a.state).resolve() if a.state else root / ".companion"
+    try:
+        # Before the engine exists: constructing one already rewrites engine.json and findings.jsonl,
+        # which would overwrite what the running engine published.
+        lock = instance.claim(state)
+    except instance.AlreadyRunning as running:
+        print(f"another engine (pid {running.holder}) is already watching {root}; not starting a second",
+              file=sys.stderr, flush=True)
+        return 1
     eng = Engine(root, Path(a.state) if a.state else None, run_tests=not a.no_tests, llm=_llm_from_args(a),
-                 log=lambda s: print(time.strftime("%H:%M:%S"), s, flush=True))
+                 log=lambda s: print(time.strftime("%H:%M:%S"), s, flush=True), config=_fix_config(a, root))
+    if eng.config is None:
+        eng.log("checked fixes: off (no --model)")
+    else:
+        fix = eng.config.route("passive.fix")
+        eng.log("checked fixes: " + (" → ".join(fix.chain) if fix.available else fix.message.replace("\n", " ")))
     q: "queue.Queue[tuple[ev.Event, int | None]]" = queue.Queue()
     fswatch.start(root, q)
     inbox = eng.dir / "inbox.jsonl"
@@ -114,6 +138,7 @@ def cmd_watch(a):
                 eng.intake_stats = last_published_intake = _intake_block(intake)
     except KeyboardInterrupt:
         stop.set()
+    lock.close()
 
 
 def cmd_board(a):
@@ -123,6 +148,20 @@ def cmd_board(a):
 
 def cmd_nvim_plugin(a):
     print(Path(__file__).resolve().parents[2] / "nvim")
+
+
+def _session(a) -> dict:
+    """What the command line says about models: it may narrow the mode and pick a local model."""
+    return {"local_only": a.local_only, "models": {"local-qwen3-coder": a.model} if a.model else {}}
+
+
+def cmd_config(a):
+    """The resolved configuration and, for every reachable remote profile, what it would receive."""
+    from . import config
+    from .fix import prompt as fix_prompt
+    from .pulled import chatty
+    prompts = {f"pulled.{f}": chatty.system(f, remote=True) for f in chatty.FUNCTIONS} | {"pulled.fix": fix_prompt.SYSTEM}
+    print(config.effective(config.load(Path(a.root), session=_session(a)), prompts))
 
 
 def main(argv=None):
@@ -136,16 +175,21 @@ def main(argv=None):
     ap.add_argument("--cpu-only", action="store_true")
     ap.add_argument("--keep-alive", default="30m",
                     help="how long the backend keeps the model resident (ollama); 0 to unload immediately")
+    ap.add_argument("--local-only", action="store_true",
+                    help="nothing leaves the machine for this run, whatever the configuration grants")
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("ingest"); s.add_argument("paths", nargs="+"); s.set_defaults(fn=cmd_ingest)
     s = sub.add_parser("replay"); s.add_argument("replay_dir"); s.set_defaults(fn=cmd_replay)
     s = sub.add_parser("watch"); s.set_defaults(fn=cmd_watch)
     s = sub.add_parser("board"); s.set_defaults(fn=cmd_board)
     s = sub.add_parser("nvim-plugin-path"); s.set_defaults(fn=cmd_nvim_plugin)
+    s = sub.add_parser("config", help="show the effective configuration")
+    s.add_argument("--effective", action="store_true", help="resolved values, their scopes, and what leaves the machine")
+    s.set_defaults(fn=cmd_config)
     a = ap.parse_args(argv)
     if a.cmd == "replay" and not a.state:
         ap.error("replay requires --state <fresh dir>")
-    a.fn(a)
+    return a.fn(a)
 
 
 if __name__ == "__main__":

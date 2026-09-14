@@ -1,30 +1,38 @@
 -- Small helpers shared by the layers. No Neovim state is owned here.
 local M = {}
 
--- Debounce: returns a function that, however often you call it, runs `fn` once after `ms`
--- milliseconds of quiet. Uses libuv timers (vim.uv), not vim.fn.timer_start, because we want
--- the same primitive available in fast contexts.
+-- Debounce: returns a function that runs `fn` once after `ms` milliseconds of quiet, counted
+-- separately for each value of its first argument (the buffer, for every caller). With one timer
+-- for all buffers, typing in a picker prompt or another file inside the window replaced the
+-- pending call for the file just edited, and that edit reached the engine only on the file's
+-- next keystroke; two buffers' diagnostics arriving together lost one of them.
+-- Uses libuv timers (vim.uv), not vim.fn.timer_start, because we want the same primitive
+-- available in fast contexts.
 --
 -- The callback runs inside vim.schedule so it may touch buffers and call the API safely:
 -- libuv callbacks fire on the event loop where most vim.api calls are forbidden.
+local NO_KEY = {}
+
 function M.debounce(ms, fn)
-  local timer = nil
-  return function(...)
-    local args = { ... }
-    if timer then
+  local timers = {} -- first argument -> its pending timer
+  return function(key, ...)
+    local args = { n = select("#", ...) + 1, key, ... }
+    local slot = key == nil and NO_KEY or key
+    local pending = timers[slot]
+    if pending then
+      pending:stop()
+      pending:close()
+    end
+    local timer = vim.uv.new_timer()
+    timers[slot] = timer
+    timer:start(ms, 0, function()
       timer:stop()
       timer:close()
-      timer = nil
-    end
-    timer = vim.uv.new_timer()
-    timer:start(ms, 0, function()
-      if timer then
-        timer:stop()
-        timer:close()
-        timer = nil
+      if timers[slot] == timer then
+        timers[slot] = nil
       end
       vim.schedule(function()
-        fn(unpack(args))
+        fn(unpack(args, 1, args.n))
       end)
     end)
   end

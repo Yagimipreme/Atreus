@@ -336,6 +336,22 @@ local function inspected(c, root, f, stale, width)
       c:gap()
     end
   end
+  local fix = not stale and store.fix(root, f)
+  if fix then
+    local warned = #(fix.warnings or {})
+    local covers = #(fix.covers or {})
+    local warning = warned > 0 and (warned .. (warned == 1 and " new warning" or " new warnings")) or nil
+    -- `✓ fix checked · 1 new warning`, or with a fix that resolves several problems, their count on
+    -- the line and the warnings under it, so neither is cut at the panel's edge.
+    c:add({ { PAD }, { "✓", "CompanionOk" }, { " fix checked", "CompanionMuted" },
+      { covers > 1 and (" · " .. covers .. " problems") or (warning and (" · " .. warning) or ""),
+        covers > 1 and "CompanionMuted" or "CompanionWarn" },
+      { "   f", "CompanionKey" }, { " review", "CompanionMuted" } })
+    if covers > 1 and warning then
+      c:add({ { PAD }, { warning, "CompanionWarn" } })
+    end
+    c:gap()
+  end
   if open.raw then
     raw_rows(c, f, stale, width)
   end
@@ -347,8 +363,20 @@ local function item(c, root, entry, width)
   local dim = stale and "CompanionMuted" or nil
   local inferred = f.basis == "inferred"
   local is_open = open.id == f.id
-  local tag = stale and "stale" or (unsaved(f) and "unsaved" or nil)
-  local where = float.truncate(place(f), width - INDENT - 1 - (tag and float.width(tag) + 2 or 0))
+  -- The right edge: what the claim rests on when that matters, otherwise that a checked fix waits.
+  local tag
+  if stale then
+    tag = { { "stale", "CompanionMuted" } }
+  elseif unsaved(f) then
+    tag = { { "unsaved", "CompanionMuted" } }
+  elseif store.fix(root, f) then
+    tag = { { "✓", "CompanionOk" }, { " fix checked", "CompanionMuted" } }
+  end
+  local tag_width = 0
+  for _, part in ipairs(tag or {}) do
+    tag_width = tag_width + float.width(part[1])
+  end
+  local where = float.truncate(place(f), width - INDENT - 1 - (tag and tag_width + 2 or 0))
   local row = {
     { " " },
     { is_open and "▼" or " ", "CompanionKey" },
@@ -358,8 +386,8 @@ local function item(c, root, entry, width)
     { where, dim or "CompanionLocation" },
   }
   if tag then
-    table.insert(row, { string.rep(" ", math.max(2, width - INDENT - float.width(where) - float.width(tag) - 1)) })
-    table.insert(row, { tag, "CompanionMuted" })
+    table.insert(row, { string.rep(" ", math.max(2, width - INDENT - float.width(where) - tag_width - 1)) })
+    vim.list_extend(row, tag)
   end
   local first = c:add(row)
   sentence_rows(c, sentence(f), f.facts, width, dim, not is_open)
@@ -440,6 +468,11 @@ local function render()
   if notice then
     c:add({ { " " }, { float.truncate(notice, width - 2), notice_hl } })
   end
+  local fixable = #store.fixable(root, state.only)
+  if fixable > 0 then
+    c:add({ { " " }, { "✓", "CompanionOk" }, { " I can fix " .. fixable .. " of these", "CompanionMuted" },
+      { " · ", "CompanionMuted" }, { "f", "CompanionKey" }, { " review", "CompanionMuted" } })
+  end
 
   local max = config.options.ui.max_findings
   for i, entry in ipairs(list) do
@@ -488,8 +521,8 @@ local function enter_key()
   return ":CompanionPanel"
 end
 
--- The keys that do something where the cursor is. Only keys that exist: no `f fix` until the
--- engine can propose one. With the cursor elsewhere, the only useful key is the way back in.
+-- The keys that do something where the cursor is. Only keys that exist: `f review` only on a
+-- problem with a checked fix. With the cursor elsewhere, the only useful key is the way back in.
 local function footer()
   local cur = M.is_open() and item_at(vim.api.nvim_win_get_cursor(state.win)[1]) or nil
   local keys
@@ -501,6 +534,9 @@ local function footer()
     keys = { { "↵", "go to" }, { "d", open.raw and "hide raw" or "raw" }, { "h", "back" }, { "q", "close" } }
   else
     keys = { { "↵", "inspect" }, { "p", M.is_pinned() and "unpin" or "pin" }, { "q", "close" } }
+  end
+  if cur and focused() and store.fix(state.root, cur.finding) then
+    table.insert(keys, 1, { "f", "review" })
   end
   local chunks = {}
   for _, k in ipairs(keys) do
@@ -737,6 +773,23 @@ function M.leave()
   end
 end
 
+-- f: review the checked fix on this problem, or the first one listed; `n` in the review moves on.
+function M.review()
+  local list = store.fixes(state.root, state.only)
+  if #list == 0 then
+    return
+  end
+  local it = M.is_open() and item_at(vim.api.nvim_win_get_cursor(state.win)[1]) or nil
+  local here = it and store.fix(state.root, it.finding) and store.fix_key(it.finding)
+  local index = 1
+  for i, f in ipairs(list) do
+    if here and store.fix_key(f) == here then
+      index = i
+    end
+  end
+  require("companion.review").open(state.root, list, index, state.origin)
+end
+
 -- h: put the inspected problem away, staying in the panel.
 function M.collapse()
   if not open.id then
@@ -821,6 +874,7 @@ local function ensure_buffer()
   end
   map("<CR>", M.inspect, "inspect, or go to the inspected problem")
   map("d", M.toggle_raw, "raw evidence")
+  map("f", M.review, "review the checked fix")
   map("j", function() M.step(1) end, "next problem")
   map("k", function() M.step(-1) end, "previous problem")
   map("p", function() M.set_pinned() end, "pin or unpin")

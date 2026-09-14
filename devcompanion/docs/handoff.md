@@ -1,533 +1,515 @@
 # devcompanion handoff
 
-Status: 2026-09-14, fourth pass (UI). This is the current pickup document for the passive
-development companion. It covers what exists, what was verified, what is only designed, and
-the next implementation order.
+Status: 2026-09-15, end of pass 7. This is the pickup document for the next session: where the
+project stands, what the user decided, what to build next, and what is still open.
 
-Read these when taking over:
+**Direction: design and implement.**
+- Latency measurement is finished.
+- A hit rate is measured only where one is missing, and only on the local instruct/coder model
+  (`qwen3-coder:30b`). The flagship is plugged in where that model proves unusable, and is not
+  benchmarked.
+- Ollama may be used.
 
-- [README](../README.md) for the project shape and runnable demos.
-- [contract v2](contract.md) for the adapter ↔ engine protocol as implemented.
-- [canonical text](text-canon.md) for the hashing rule both halves obey.
-- [intake watermark](intake-watermark.md) for the durable read position in the inbox.
-- [model routing](model-routing.md) for which model does which work, and why.
-- [providers](providers.md) for how each model is reached, and the safety gate on CLI agents.
-- [configuration](configuration.md) for config scopes, the content-sharing boundary, and the
-  standing decision on porting to Rust.
-- [edits and approval](edit-actions.md) for the proposed edit path.
-- [skills and modes](skills-and-modes.md) for the skill format, capability negotiation, and
-  why a repository may offer a skill but not enable one.
-- [workflow report](workflow/index.html) for the current C4 and BPMN diagrams.
-- [workflow checks](workflow/test-results.md) for the latest verified run.
-- [editor feedback design](editor-feedback-design.md) for the unsaved-buffer loop as designed.
-- [proposed workflow diagrams](workflow/proposed/index.html) for the target C4 and BPMN flow.
-- [local model and QMD design](local-model-and-context.md) for context budgets, QMD retrieval,
-  and model evaluation order.
-- [local model results](evaluations/local-model-results.md) for measured Qwen3-Coder and
-  fallback behavior.
+## Start here
 
-## UI pass (2026-09-14, fourth pass)
+devcompanion is a passive development companion.
+- **The engine** (Python) watches what you type in Neovim, including **unsaved buffers**. It
+  snapshots the code, detects signature changes, finds broken call sites, runs tests after saves,
+  interprets the language server's diagnostics, proposes checked fixes, and publishes findings.
+- **The adapter** (Lua) sends editor events and draws the findings.
 
-Direction from the user, with a screenshot of the old pane: it read like a log window. Four
-surfaces competed for space (tree, editor, terminal, companion); the companion front-loaded
-engine, buffer, model and context metadata and then echoed every diagnostic verbatim. The
-redesign is three levels of attention, and the rule for the panel is *one line per problem, one
-inspected problem at a time, raw diagnostic only on request.* Details in
-[nvim/README.md](../nvim/README.md).
+The two halves talk only through files under `<workspace>/.companion/` ([contract.md](contract.md)).
 
-Built:
+### State at handoff
 
-- **At rest: a statusline count.** `require("companion").statusline()` and `statusline_hl()`:
-  `◉ 5`, `◉`, `◉ 5 …`, `◌`. Wired into the user's LazyVim lualine in
-  `~/.config/nvim/lua/plugins/devcompanion.lua`, with `<leader>aa` for the panel and
-  `<leader>as` for info. Avante was removed from that config at the user's request, which freed
-  `<leader>a…`.
-- **Asked: the panel** (`panel.lua`), a float at the right edge rather than a split. `↵`
-  inspects one problem (the code with Tree-sitter highlighting and a caret, got and expected,
-  what changed, a likely fix when a model offered one); `↵` again goes to it; `d` adds
-  provenance (source, every raw diagnostic, basis, buffer). The footer lists only keys that do
-  something. Having been asked for, it takes focus, because its keys act inside it, and returns
-  the cursor when it closes. That reverses the earlier "hands the cursor back on open" rule; the
-  contract's rendering rules say so. Pinned mode (`ui.pinned`, `:CompanionPanelPin`, `p`; it
-  was called sticky until the polish below) keeps it open on leaving and after a jump.
-- **Metadata: `:CompanionInfo`** (`info.lua`), everything the old header had plus intake and
-  adapter counters. `:CompanionStatus` opens the same view.
-- **Problems, not diagnostics** (`present/problems.py`, engine side). Each language-server
-  message is normalised to one sentence plus the facts it names (`symbol`, `expected`, `got`,
-  `parameter`), and messages about one mistake are grouped: same line and overlapping ranges,
-  the same symbol, the same construct, or codeless syntax errors from one source. Checked
-  against the user's live basedpyright output: four messages in `testing/test.py` became two
-  problems, `split() expects str | None, got int` and `incomplete import statement`. The panel
-  colours the facts, never the whole sentence. Contract additions: `facts` and `diagnostics` on
-  `diagnostic_context`, `outcome` on `test_result`; a diagnostic's `title` is now the sentence.
-- **Green test runs are a count** (`✓ 71 tests`) from `outcome`, not a row.
+| | |
+|---|---|
+| Branch | `main` in `~/repos` (that repo tracks only `devcompanion/`), level with `origin/main` at `b5aac42`. No other session has committed since |
+| Remote | `https://github.com/Yagimipreme/Atreus.git` — **public**. HTTPS through `gh`; SSH has no key |
+| Uncommitted | **passes 5, 6 and 7**: 59 paths. `testing/test.py` is the user's scratch file — leave it. The user commits on request; ask before committing or pushing |
+| Unit tests | **191 passed** — `.venv/bin/python -m pytest -q` (~31 s; 188 under `tests/`) |
+| Integration | **55 checks passed** — `scripts/check-workflow.py` (~2 min). It configures no model, so it does not exercise checked fixes; `tests/test_engine_fixes.py`, `tests/test_fix_check_project.py` and a tmux run of the panel do |
+| Engine | running detached, pid **1355210**, `--model qwen3-coder:30b`, checked fixes on, holding `.companion/engine.lock` |
+| Ollama | running (system service, 0.33.3); the user allowed its use |
+| Neovim | **the user has not restarted it since the pass 7 Lua changes**: the panel's fix review, merged fixes, and `?` rows for unknown receivers are not yet in their editor |
+| Global KB | pages written and linted, **not published** (see *Knowledge base*; `publish.sh` commits and pushes — ask) |
 
-Found and fixed on the way, by using the panel in a real editor:
+### Read, in this order
 
-- **An unsaved edit to a file opened after `:CompanionStart` reported nothing.** The first event
-  for such a path is the buffer. `view.disk_revision` hashed the file without storing its bytes,
-  so the comparison had nothing to read, and every later save of that path was "first
-  observation". `engine.handle_event` now stores the file as the baseline on first sight of a
-  buffer. Regression test:
-  `test_a_file_first_seen_as_an_unsaved_buffer_is_judged_against_the_file`. The harness never
-  caught it because every scenario opens its files before `:CompanionStart`.
-- **Diagnostics that settled before `:CompanionStart` were never sent**, so the panel stayed
-  empty until the next edit. `collect.announce_open_buffers` now sends them with the buffer.
-- A `QuitPre` handler written for pinned mode (then called sticky) made `:qa!` hang with the panel open. Neovim 0.12
-  does not need it; it is gone. The harness caught this one.
-- **`:CompanionStart` run with the pinned panel focused observed a workspace called
-  `companion:/`.** The root was derived from the current buffer's name, and `companion://panel`
-  reads as a path. That editor then watched nothing real, and the panel said "no problems" and
-  "engine stopped" over an empty store. Found by the user on first live use of pinned mode (then called sticky).
-  `util.workspace_root` now refuses URI-like names; commands fall back to the panel's workspace
-  or the observed one; and a panel opened on an unobserved workspace says `not observing this
-  workspace · :CompanionStart` instead of describing an empty store. Both are harness rows.
+1. This file.
+2. [evaluations/function-routing.md](evaluations/function-routing.md) — which model does which job
+   (hit rates, routing, decisions), and [evaluations/chatty-functions.md](evaluations/chatty-functions.md)
+   for the prose functions.
+3. [configuration.md](configuration.md) — profiles, routing chains, gates, `local-only`, the machine
+   grant. Implemented.
+4. [model-routing.md](model-routing.md) — trust levels (✓ fact, ✓ checked, ◇ advice), passive vs
+   pulled, the resident specialist against the flagship, the prompt design rule.
+5. [nvim/README.md](../nvim/README.md), [contract.md](contract.md), [edit-actions.md](edit-actions.md) —
+   the UI, the protocol and how edits are offered.
+6. As needed: [code-documentation.md](code-documentation.md), [evaluations/checked-fixes.md](evaluations/checked-fixes.md),
+   [providers.md](providers.md), [skills-and-modes.md](skills-and-modes.md), [text-canon.md](text-canon.md),
+   [intake-watermark.md](intake-watermark.md), [vision.md](vision.md),
+   [local-model-and-context.md](local-model-and-context.md).
 
-Not built, and what each waits on:
+## What is built
 
-- **Deep-work workspace** (plan, grill, review floats): the Chat surface, step 8 below.
-- **Proposed-fix diff view** (`f`, accept, reject, next): the outbox writer and edit actions,
-  step 4. The panel shows no `f` key until then.
-- **Model-written sentences for diagnostics.** Today's sentences come from rules, and a message
-  no rule knows keeps its first line. A model may rewrite sentences later; grouping and facts
-  stay deterministic, because they are what make a model's sentence checkable.
+### Engine (`src/devcompanion/`)
 
-Pick-up note: an engine started before this pass publishes the old finding shape. The adapter
-still renders it, but grouping, facts and test counts appear only after the engine restarts.
+**Analysis:**
+- Observes editor events and saves, and snapshots content by hash, with unsaved buffers as overlays.
+- Detects signature changes and removed functions.
+- Judges call sites over the revisions the editor actually holds.
+- Runs tests for saved content, and interprets diagnostics into problems (`present/problems.py`).
+- Publishes `findings.jsonl` and `engine.json`.
+- The model tier writes one suggestion per breaking claim, still through `llm/client.suggest`.
 
-### Polish (same day)
+**Caller reachability** (`investigate/callers.py`, pass 7). A call counts only where it can reach the
+function:
 
-The user's direction after living with it: polish, not redesign. Done:
+| Function kind | Where a call counts |
+|---|---|
+| Nested | inside its enclosing function |
+| Module-level | in its own file, or through an import: `from m import f [as g]`, `from m import *`, `import m [as x]`, `from pkg import m`, relative imports |
+| Method | `self.`, `cls.` or `Class.`. Any other receiver only in files that import the class, and then as `unsure` (`?`) |
 
-- **Richer sentences** (`problems.py`). A None operand is `possible None used with +`, an
-  optional argument `possible None passed to authenticate()`, a return mismatch `returns str,
-  expected bool`, plus attribute access on None, subscripting, calling and iterating None, and
-  module attributes. Missing arguments and unresolved imports report what is `missing`.
-- **One vocabulary for facts.** What the code has (`got`, `found`, `returned`, `missing`) in
-  red, what it needs (`expected`, `required`) in green, where (`operator`, `with`, `parameter`,
-  `module`, …) plain, always in one order under an opened problem, so the block reads the same
-  for every kind of mistake. The user asked for this to become the companion's visual language.
-- **The offending range in the code.** Diagnostic locations now carry `end_line`/`end_col`; the
-  excerpt is Tree-sitter highlighted with the range (the `3` in `split(3)`) in red on top.
-- **A calmer selection.** A `CursorLine` background on the selected problem's two-line head, a
-  `▸`/`▼` marker, and the terminal cursor hidden while the panel has focus (a cursor highlight
-  with `blend=100`; verified in the TUI through tmux's cursor flag before relying on it).
-- **Pinned, not sticky.** `ui.pinned`, `:CompanionPanelPin`, `p`, and a 📌 in the title.
-- **Collapsed problems are exactly two lines**; the sentence is cut only when it cannot fit,
-  and given whole once opened.
-- **Linked to the code.** While pinned, moving the code cursor onto a problem's line opens it
-  in the panel and moving off restores what was open before; a problem opened by hand is only
-  selected, never taken away. While the panel has focus, the selected problem's range is marked
-  in the code. Nothing moves the cursor except `↵`. The first version of following did not
-  remember what it replaced, and the harness caught it.
-- **Which window has the keyboard is visible.** In live use the user "left" the panel with
-  `<Esc>`, which then only folded the inspected problem, and could not find the way back in —
-  the cursor was still inside, hidden, with a selection background that the colourscheme made
-  nearly invisible. Now the border is bright while the panel has focus and dim while it is only
-  in view, `<Esc>` always leaves (a pinned panel stays in view, an unpinned one closes), `h`
-  folds, and the unfocused footer names the user's own mapping back in (`␣aa focus`).
+It was built after the user's panel showed 56 rows from one removed nested helper `add`.
 
-## User direction
+**Checked fixes** (`fix/`, wired in pass 7):
+- **Trigger:** a saved Python file whose editor diagnostics report errors queues a `fix` job on the
+  engine's single worker. It is never run for an unsaved buffer or in replay. At most 3 problems per
+  revision; a problem already answered at this revision is not asked again.
+- **The fix module** (`fix/`):
 
-The user wants an MVP that observes Neovim while they code, gives passive feedback in a side
-pane, and can use a local model first. The agreed direction is unchanged:
+  | File | Does |
+  |---|---|
+  | `prompt.py` | builds the packet |
+  | `propose.py` | asks the `passive.fix` routing chain and merges fixes |
+  | `patch.py` | turns the reply into an edit |
+  | `check.py` | the gate: applies → parses → not suppressed → target gone by rule → no new *error*. A new warning is carried beside the ✓ |
+  | `project.py` | the checker runs over a **shadow tree of the whole workspace**, with every other unsaved buffer in place |
 
-- Test locally with `qwen3-coder:30b` before any hosted API.
-- Keep deterministic evidence useful without a model.
-- A single Neovim side pane with live fields for each output.
-- A provider/profile option, not just raw `--model`, so a local or flagship model can be
-  selected deliberately.
-- Define exactly what a flagship model receives: a bounded, inspectable context packet, not
-  the whole repository.
-- Let QMD warm project context on Neovim/project open, but keep QMD local and engine-managed.
-  The model receives selected passages with provenance; it does not freely query arbitrary
-  personal/global knowledge in the MVP.
+  The shadow tree is symlinks, with real directories only along the files that differ. basedpyright
+  gives exactly the real project's diagnostics, in ~0.7 s.
+- **Several problems, one fix.** Before asking about a problem, every fix already checked is tried
+  against its targets. If one removes them too, the model is not asked. Problems resolved by the same
+  edits share a `fix_id`, with their lines in `covers`.
+- **What is recorded:** `fix_proposal` evidence per problem.
+  - A checked fix appears on its `diagnostic_context` as `fix`: `{id, verdict, covers, warnings,
+    edits, diff, profile, depends_on}`.
+  - A problem the checker does not report is `not_visible`, and is never sent to a model.
+  - A proposal no model answered is not recorded, so the next save asks again.
+- **Verified live (pass 7):** the 30B's fixes for three problems all checked. One exists only through
+  a relative import.
 
-## What changed in this pass
+**Configuration and routing** (`config.py`, `llm/route.py`, pass 7):
+- **Scopes:** machine `~/.config/devcompanion/config.toml` (or `COMPANION_CONFIG`); project
+  `.companion.toml`, which may request and route but never grant, set the mode or define a profile;
+  session flags, which only narrow.
+- **Mode:** `local-only` is the default; `hybrid` needs a machine grant keyed by the project's path.
+  A passive function never keeps a remote profile.
+- **Profiles:** `local-qwen3-coder`, `local-fast` (3B on the CPU) and `flagship` (a providers.py spec,
+  default `claude:sonnet/low`; `codex:` fills the same role in one line). Remote-ness is derived, never
+  declared.
+- **The router:** tries the chain, moves on when the packet does not fit, the call fails or the
+  function's gate refuses, and names the profile that answered. `system` may be a function of the
+  profile, giving each kind of model its own prompt.
+- **Unavailable functions** say what they need and what is local:
+  `Explain needs a reasoning model. Available locally: symbols · references · types · diagnostics`.
+- **`companion config --effective`** prints every value with its scope, and for each reachable remote
+  profile the exact command and system prompts.
+- **Not yet:** the engine's one-sentence suggestion does not route through this, and `engine.json`
+  does not report the routing.
 
-Steps 1–7 of the previous implementation order are done. Both previously confirmed gaps are
-closed and are now asserted as capabilities.
+**One engine per workspace** (`instance.py`, pass 7): `watch` takes an exclusive `flock` on
+`.companion/engine.lock` before writing anything. A second `watch` exits with
+`another engine (pid N) is already watching …`. `ingest` and `replay` take no lock.
 
-**The engine analyses unsaved buffers.** This was the whole point of the project and it did
-not work: `observe/events.py` rebuilt only its own small field list on intake, so `text`,
-`dirty`, `session`, `doc_version` and the rest were dropped and the editor's content never
-reached the engine. Protocol v2 keeps them, and keeps unknown fields in `Event.extra` rather
-than discarding them.
+**Providers** (`llm/providers.py`, pass 6):
+- **One call:** `ask(spec, system, user)` for `ollama:` (`tokens`, `ctx`, `keep`, `gpu=0`,
+  `endpoint`), `claude:<alias>[/effort]` and `codex:[model][/effort]`.
+- **Tool-less:** the CLIs run in an empty scratch directory; `argv()` is the one command builder.
+- **Tripwire passed for both** (`scripts/check-provider-tripwire.py`).
 
-**Canonical text is defined and pinned.** The adapter hashed lines joined with `\n`; the engine
-hashed the bytes on disk. Those differ for any file with a trailing newline, which is all of
-them — so every hash comparison would have failed the moment a buffer was saved. The rule is
-now [text-canon.md](text-canon.md): the bytes Neovim would write, per `fileformat` and `eol`.
-Fixtures in `tests/fixtures/text-canon.json` are checked by both the Python suite and a real
-`:write` in a headless Neovim. That check immediately caught a wrong special case for the
-empty buffer, which is what it was for.
+**Prose functions** (`pulled/chatty.py`):
+- The judged prompts for explain, grill, plan, change summary and commit message; `FLAGSHIP` prompts
+  where the flagship gets its own (grill); `shape_commit` enforces the commit format in code;
+  `diff_stats`.
+- **No surface calls them yet.**
 
-**Content-view index** (`view/index.py`). Each path has a disk revision and, while a buffer is
-dirty, an editor overlay. `effective()` picks the overlay when there is one. `manifest()` is
-the analysis manifest — the revision each claim was actually computed from.
+### Editor (`nvim/`)
 
-**Unsaved edits are judged against the last save**, not against the previous keystroke pause.
-Comparing consecutive drafts would split one edit across debounce windows and report it as a
-stream of noise.
+- **From pass 4:** panel, statusline count, pinned mode, `:CompanionInfo`. Per-buffer debounce
+  (pass 5).
+- **Checked fixes** (pass 7, verified in a real Neovim in tmux):
+  - **The panel:** `✓ fix checked` at a problem's right edge; `✓ I can fix N of these · f review`
+    under the count; the fix, its problem count and new warnings in the opened problem.
+  - **`f`** opens `review.lua`'s float: the problem sentences a fix resolves, then the diff. Keys:
+    `a` apply, `r` reject, `n` next (only when there are several fixes), `q` close.
+  - **`a`** re-checks `depends_on` against the live buffer's canonical hash, applies the edits
+    bottom-up as one undo step, leaves the buffer unsaved, and sends `action_result`
+    (`applied` / `refused_stale` / `declined`). The engine logs it and never acts on it.
+  - A fix is offered, applied and declined once, however many problems it resolves. Declines last for
+    the Neovim session only.
+  - `A` (delegate to an agent) is not bound: delegation does not exist.
 
-**Callers are searched over effective revisions.** `rg` reads files, so a call typed a second
-ago is invisible to it; dirty paths are added to the candidate set. A related bug turned up
-while testing: a file that *newly* mentions a changed callee never re-judged the existing
-claim, because staleness only fires for files the claim already depended on. A new or newly
-relevant caller file now re-submits the defining file. This was broken for saved files too.
+### Evaluation tooling (hit rates only; no Codex; no flagship benchmarking)
 
-**The engine publishes to the editor.** `findings.jsonl` and `engine.json`, both written
-whole and atomically. `engine.json` carries the analysis manifest, so the editor can answer
-"is this talking about the code in front of me?" rather than guessing from timestamps.
+| Script | Measures |
+|---|---|
+| `scripts/evaluate-fixes.py` | checked fixes on the hand-written corpus; `--rejudge` re-checks stored replies without a model |
+| `scripts/build-function-corpus.py` | builds `tests/fixtures/function-corpus.json` (sentences, planted bugs, controls) |
+| `scripts/evaluate-functions.py` | sentence, suspicious-line and culprit hit rates; `--rescore` without a model |
+| `scripts/route-policies.py` | escalation chains, the warnings rule and model pairs, replayed from stored rows |
+| `scripts/check-provider-tripwire.py` | the provider safety gate |
+| `scripts/chatty.py` | prose functions on the 30B, judged by hand: `run`, `replies`, `judge`, `report`. Cases are in `testing/chatty/`; `:luafile testing/chatty/chatty.lua` asks them from Neovim. Only runs under the prompts in force count |
 
-**One side pane** (`nvim/lua/companion/panel.lua`), replacing the per-surface scratch buffers.
-`render.lua` became `findings.lua`, a store with no windows in it. `:CompanionErrors` and
-`:CompanionCallers` are the same pane, filtered.
+The tmux driver that verified the panel in pass 7 lived in a session scratchpad and is gone. If UI
+checks recur, rebuild it under `scripts/`. It was a workspace built by the real engine with a
+stand-in model, an `engine.json` heartbeat keeper, `nvim -n -u <minimal init>`, and
+`tmux send-keys` / `capture-pane`.
 
-**Saved-test distinction.** pytest reads the working tree, so it is not run for buffer-only
-content at all, and its evidence is labelled saved-revision-only — including the names of
-unsaved buffers it could not speak for. The published finding carries `saved_revision_only`.
+## What the user decided
 
-**Buffers open before start are announced.** `collect.start()` only registered autocmds, so a
-buffer that was already open — possibly with unsaved work already in it — was invisible to the
-engine until the next keystroke. It now sends each loaded buffer of this workspace once.
+### Pass 7 (2026-09-14 to 15)
 
-**Session end.** An editor that quits takes its unsaved buffers with it. `VimLeavePre` sends
-`session_end` (synchronously — the event loop stops before an async write would land), and the
-engine drops that session's overlays and re-judges the affected paths. Without it the engine
-would go on reporting content that exists nowhere.
+**Prompts and model roles**
+- **Design rule for local prompts: ask for one thing and a stop, not a format to fill.** Facts go
+  before the sentence; code enforces what code can.
+  - **Measured:** it fixes format, not selection. The commit schema held.
+  - **But:** asked for the single strongest grill question, the 30B picked wrong (4 of 6 unusable)
+    and never used the stop word.
+- **The 30B is the resident specialist.** It observes, compresses, summarises diffs, challenges a
+  selection with three questions, and generates candidate fixes. **The flagship** understands,
+  explains, plans, designs and discusses. `flagship` is a configuration role (Claude Code or Codex),
+  never a provider named in code, and must stay provider-agnostic.
+- **Grill goes to the flagship:** one richer question per turn (question, why it matters, what
+  settles it), one-shot until the Chat surface exists. The judged three-question prompt stays on the
+  30B as the `local-only` fallback.
+- **Commit message** keeps the constrained prompt on the 30B: `subject:` / `body:`, observable
+  changes only, no motive. Code strips the period and reports a subject over 60 characters without
+  cutting it, since cutting can hide a change. Result: 4 good, 1 fixable, 1 unusable.
+- **Explain and plan under `local-only`** say they need a reasoning model and list what is local. A
+  labelled best effort may be offered, never by default.
+- **Diagnostic sentences** stay on the 3B on the CPU.
+- **Change summary becomes change awareness.** The engine's facts (changed files, symbols, call
+  sites, diagnostic changes, diff statistics) are expressed as one sentence that adds nothing beyond
+  them. Agreed; unbuilt.
 
-Two smaller fixes found on the way: the adapter never set `source`, so every event was logged
-as `cli`; and `vim.json.decode` turns JSON `null` into `vim.NIL`, a userdata sentinel, which
-threw on the first `engine.model.name or "none"`. All adapter JSON now goes through
-`util.decode_json`.
+**Fixes**
+- **Checked fixes are the local model's most valuable job:** a borderline model proposes,
+  deterministic tools accept.
+- **A new warning is noted beside the ✓, not refused**; a new error refuses.
+- **One fix that resolves several problems is one fix** (`✓ fix checked · 2 problems`).
+- **The fix hit rate is done.** The hand-written corpus stands; no real-problem labelling.
 
-## What changed in the third pass
+**Engine and documentation**
+- **One engine per workspace**, enforced by the engine.
+- **Documentation for the code in view: both halves.** Surfacing existing docs is local; writing docs
+  goes to the flagship ([code-documentation.md](code-documentation.md)).
 
-The intake watermark, the local model tier, and the first live session. Three commits:
-`devcompanion: passive development companion` (initial), `model tier: keep resident, call per
-save…`, `findings: a published field is a line…`, `engine: a heartbeat that stops while idle…`.
+### Earlier, still binding
 
-**The intake watermark is done** ([intake-watermark.md](intake-watermark.md)). `companion watch`
-resumes where it left off instead of replaying the editing history on every restart. Two
-mechanisms together: a byte offset for cost, and a per-session accepted-sequence mark for
-correctness when the offset has to be reset. Session ids are now unique per Neovim instance —
-`math.random` is unseeded in LuaJIT, so every instance had been returning the same id.
+- **Pass 6.** Per-function model selection as data. `local-only` is a first-class mode and the
+  default. No flagship testing on jobs a small model does. The 30B proposes unasked fixes, and the 3B
+  stays out of fixes. Codex is not tested further.
+- **Chatty bar.** More than 1 unusable reply in 6 hand-judged cases routes a function to the
+  flagship. Explain (3) and plan (2) went there. The labels are proposed by the agent and confirmed by
+  the user.
+- **Pass 5.** Two lanes: passive (automatic, tiny, verifiable) and pulled (user-invoked, may advise).
+  Trust marks ✓ fact / ✓ checked / ◇ advice, and **◇ never appears unasked**. Deterministic analysis
+  discovers facts; a model compresses or connects them. Change awareness speaks in the editor's
+  voice. Completion stays outside the companion. The roadmap comes later, as repo-backed Markdown
+  epics.
+- **Pass 4, UI.** Polish, not redesign. Three levels of attention: statusline count → compact panel
+  → deep-work float. One line per problem. Interpret, don't echo. Semantic, scarce colour. No engine
+  metadata while coding. Nothing opens on its own. No key for a capability that does not exist.
+- **Designs from the user, not yet built:** `plan` and `grill` floats (`<leader>ap`, `<leader>ag`,
+  `<leader>ar`; `<leader>ai` is taken by `claude_agent.lua`), model-normalised sentences where the
+  rules run out, and `defined in` for undefined names.
 
-**The local model is wired and in use.** `qwen3-coder:30b` through Ollama, called per save and
-only when breaking call sites exist, with `keep_alive` so the model stays resident. A claim is
-asked about once: re-deriving an unchanged claim reuses the stored sentence.
+## Routing in force
 
-**Six defects came out of running it**, none from the test suite. They are listed under
-*Verified behavior* below because each is now covered. The pattern is recorded globally in
-`global-lessons` — a green suite is a regression net, not a discovery instrument.
+| Function | `local-only` | `hybrid` | Basis |
+|---|---|---|---|
+| Checked fix, unasked | 30B | 30B (passive stays local) | decided · 48/51 ✓, 1 wrong |
+| Checked fix, on `f` | 30B | 30B → flagship when the gate refuses | decided |
+| Diagnostic sentence where the rules run out | 3B on the CPU, behind the sentence check | same | decided · 18/30 |
+| Change-awareness sentence | 30B, behind a nothing-beyond-the-facts check | same | decided design · unbuilt |
+| Change summary | 30B | 30B | decided · 0 of 6 unusable |
+| Commit message | 30B, constrained prompt | 30B | decided · 4 / 1 / 1 |
+| Grill | 30B, three questions | flagship, one richer question; the 30B when it does not answer | decided |
+| Surface documentation for the code in view | deterministic and QMD | adds remote doc search on request | decided scope · unbuilt |
+| Most suspicious line | 30B | flagship | proposed · 16/30 against 29/30 |
+| Failing test → culprit | 30B | flagship | proposed · 21/30 against 28/30 |
+| Explain, plan, write docs, architecture, roadmap | unavailable; names what is local | flagship | decided |
+| Completion | outside the companion | outside | decided |
 
-## Current implementation
+These are the defaults in `config.py` (`DEFAULT_ROUTING`). Sonnet and Opus name what filled the
+flagship role when measured.
 
-Two halves communicate through files under `<workspace>/.companion/`.
+## Next steps — build
 
-```text
-Neovim Lua adapter              .companion/ files             Python engine
-------------------              -----------------             -------------
-collect.lua sends events  ->     inbox.jsonl             ->    watch/tail
-findings.lua holds state  <-     findings.jsonl          <-    present/findings.py
-panel.lua draws           <-     engine.json             <-    present/status.py
-adapter may answer LSP    <-     outbox.jsonl            <-    not produced yet
-                                  board.md, quickfix.txt
-                                  events.jsonl, evidence.jsonl, state.json
-                                  view.json, snapshots/
-```
+Build steps 1–5 are done (configuration and routing, the warnings rule, checked fixes in the engine,
+review and apply in the panel, the whole-project gate). In order from here:
 
-`outbox.jsonl` is the one contract file the engine still does not write. That is correct for
-now: it has no LSP question to ask. The adapter already tails it.
+6. **Diagnostic sentences where the rules run out.**
+   - **Route:** the 3B on the CPU through `passive.sentence`, behind the sentence check (names kept, at
+     most 14 words, nothing invented, not an echo; `scripts/evaluate-functions.py` holds the check).
+   - **Fallback:** the raw first line when the check fails.
+   - **Engine side:** `present/problems.py` keeps grouping and facts; the model only rewrites the
+     sentence.
+   - **Open:** confirm the CPU-only 3B's hit rate once.
+7. **Change-awareness lines.**
+   - **Deterministic first:** `renaming sep · 2 callers remain` from signature and caller findings (✓
+     fact).
+   - **Then the one-sentence version:** a facts packet goes to the 30B, behind a check that the
+     sentence names nothing beyond the facts. Measure its hit rate once built.
+8. **Pulled actions as ◇, through their chains.**
+   - **Most suspicious line, and failing test → culprit.**
+   - **The prose functions**, with the judged prompts in `pulled/chatty.py`:
+     - grill: the flagship prompt in hybrid, three questions locally
+     - commit message and change summary on the 30B
+     - explain and plan on the flagship
+   - **The UI:** `plan` and `grill` floats with the user's keys. A prompt change means re-running and
+     re-judging its cases.
+9. **Route the engine's model calls through the configuration.** The one-sentence suggestion still
+   calls `client.suggest`. Also `engine.json` reports the active routing.
+10. **Documentation surfacing** ([code-documentation.md](code-documentation.md)).
+    - **Engine:** needs an `outbox.jsonl` writer (the engine has never sent an `lsp_request`).
+    - **Adapter:** already answers `hover`, `definition`, `references` and `document_symbols`.
+    - **Recommended order:** docstrings through hover, then QMD.
+11. **Later:**
+    - **The Chat surface.** Still open: the flagship is reachable one function at a time, with no
+      conversation state. Grill's one-question-per-turn needs it, and so do modes.
+    - **Tests over the shadow tree**, so ✓ can mean more than type-consistent.
+    - **Edits to other files, and agent delegation in a worktree.**
+    - **Roadmap epics.**
 
-## Verified behavior
+**Working rules for UI changes:**
+- After engine or Lua changes, restart the engine (see *Live setup*) and tell the user to restart
+  Neovim.
+- Rerun the harness, and look at a real terminal before calling a UI change done.
 
-The harness is [scripts/check-workflow.py](../scripts/check-workflow.py). It uses real CLI
-execution, the real engine, real pytest, and real headless Neovim.
+## Hit rates still missing
 
-Latest documented result: **54 checks passed; 0 failed; 0 gaps.** Plus 107 unit tests.
+Hit rates only: no timing, no Codex, no flagship runs.
 
-```bash
-uv run pytest -q
-.venv/bin/python scripts/check-workflow.py
-```
+1. **The CPU-only 3B sentence hit rate**: the same weights as the measured run; confirm once.
+2. **The change-awareness sentence**, once built.
 
-Beyond the previously passing saved-file workflow, the harness now establishes:
+## Findings that shape the design
 
-- Canonical text hashes identically in the adapter, the engine, and the file Neovim writes,
-  across every fixture case.
-- An unsaved signature change produces caller findings while the file on disk is unchanged.
-- The adapter's `text_sha`, the engine's `content_sha`, and the sha a finding depends on are
-  one value.
-- Protocol v2 fields survive intake; buffer text does not enter the event log.
-- `findings.jsonl` and `engine.json` are written, with per-input revision origins.
-- The panel leads with a problem count and keeps engine metadata out (that is
-  `:CompanionInfo`); `↵` inspects one problem, `d` adds provenance; it opens only on request,
-  takes focus, gives the cursor back on close, and a pinned panel survives leaving and a jump.
-- A pinned panel is linked to the code both ways: the problem on the code cursor's line opens in
-  the panel and moving off restores what was open, and the problem selected in the panel is
-  marked in the code until the panel loses focus. The terminal cursor hides inside the panel and
-  comes back exactly on leaving it.
-- Two language-server messages about one mistake, one of them multi-line, draw as one problem
-  with one sentence; the statusline carries the count.
-- Saving retires the overlay; the same bytes moving from buffer to disk re-runs the tools that
-  read files.
-- Quitting the editor drops its overlays.
-- Buffers already open when `:CompanionStart` runs are announced immediately, including an
-  already-modified one, rather than waiting for the next keystroke.
-- `companion watch` resumes at its recorded position and re-reads nothing, on both a clean
-  restart and after the inbox is rotated or truncated.
-- The local model is asked once per claim, never while typing, and its sentence reaches the
-  pane. Tested against a real HTTP server on a loopback port, not a mock, because what is worth
-  asserting is the request body and the call count.
-- A published finding field never contains a newline. Neovim refuses to set a buffer line
-  containing one, so a multi-line language-server message did not render badly — it raised and
-  killed the pane on every republish.
-- Liveness and findings are published on different cadences: `engine.json` every five seconds
-  while idle, `findings.jsonl` only on change.
-- A workspace nested inside its git repository still gets committed-version baselines. Found
-  by running the engine on this project after it was committed into `~/repos`: `git show
-  HEAD:<path>` resolves from the repo root, so every file read as first-seen and the companion
-  said nothing at all. Every harness fixture is its own repo rooted at the workspace, which is
-  why nothing caught it.
+Numbers: [evaluations/function-routing.md](evaluations/function-routing.md),
+[evaluations/chatty-functions.md](evaluations/chatty-functions.md).
 
-## Model state
+**Hit rates**
 
-Unchanged from the previous pass; no hosted API call has been made.
+| Job | 3B | 30B | Sonnet | Opus |
+|---|---|---|---|---|
+| Fixes (✓ shown / wrong), warnings noted | 41/4 | 48/1 | 51/0 | 50/0 |
+| Sentences | 18/30 | 13/30 | | |
+| Suspicious line, exact | 4/30 | 16/30 | 24/30 | 29/30 |
+| Culprit | 9/30 | 21/30 | 28/30 | 28/30 |
 
-`qwen3-coder:30b` is wired and running. Measured through the engine's own request path on
-2026-09-14: **cold load 25.4 s, warm 0.87 s** (5.5 GB resident in VRAM of 19.2 GB, partial
-offload on the 8 GB card). This supersedes the earlier 15.437 s / 1.66 s figures from the
-standalone evaluation harness. `qwen2.5-coder:3b` remains the fast fallback at ~0.15–0.21 s but
-was weaker on mixed caller prompts; `qwen3:4b`, the size the vision actually named for the
-passive tier, is installed and has never been measured on this workload.
+**Routing and gates**
+- **Escalation recovers refusals, never a wrong ✓.** The most precise model goes first wherever a ✓
+  is shown.
+- **A gate must be computable at run time.** Fixes and sentences have one; suspicious-line and
+  culprit answers do not.
+- **Two models agreeing buys precision:** 30B ∧ Sonnet flags 15/30 bugs with no false flags.
 
-The model is called **per save only**, never per keystroke pause, and only when breaking call
-sites exist. `keep_alive` defaults to 30m (`--keep-alive`), without which most saves after a
-pause pay the cold load.
+**Local hardware and models**
+- **On the 8 GB card, the 3B and the 30B evict each other.** A CPU-only 3B coexists with the 30B.
+- **The 30B:**
+  - **Invents facts in unchecked sentences.**
+  - **Pads every "at most N" to N.**
+  - **Can't pick the single most important point.**
+  - **Explains and plans wrongly on substance.**
+  - **Reads diffs well.**
+  - **Fixes the whole file** when asked about one problem.
+- **`qwen3:4b` as installed is unusable:** it reasons in its reply despite `think: false`.
 
-Use `qwen3-coder:30b` as the primary local candidate for optional background suggestions. Keep
-deterministic findings immediate and append model text when it arrives. Continue to pass only
-breaking sites to the model.
+## Live setup on this machine
 
-Evaluation artifacts: [Qwen3-Coder raw](evaluations/qwen3-coder-30b.json),
-[3B baseline raw](evaluations/qwen25-coder-3b.json),
-[summary](evaluations/local-model-results.md).
-
-## QMD and context
-
-Unchanged and still designed, not built. `engine.json` already carries a `context` field
-reporting `qmd disabled`, and the pane renders it, so wiring retrieval in is additive.
-
-QMD keyword retrieval was smoke-tested against an isolated temp collection of copied project
-docs: three queries at ~0.112–0.117 s. That proves local retrieval, not semantic quality or
-end-to-end RAG quality. It returned both proposal and historical documents, so provenance is
-mandatory: the context builder must know whether a passage is current implementation, accepted
-decision, proposal, historical note, or external reference.
-
-For the MVP:
-
-- QMD may run during project/session warmup after Neovim starts the companion.
-- Warmup is asynchronous and visible in the pane as `warming`, `ready`, or `unavailable`.
-- QMD indexes a project-scoped curated collection, not arbitrary global notes.
-- Unsaved code and live saved code do not belong in the documentation index. They come from
-  editor overlays and the analysis manifest.
-- A hosted or flagship model receives only selected passages with source path, hash/revision,
-  status, and query provenance.
-- Do not automatically call a remote flagship model on open. Retrieval warmup is fine; remote
-  generation depends on explicit provider/profile and content-sharing policy.
-
-## Provider/profile design
-
-Still designed, not built. The CLI has `--model`; the user asked for something like `-p` for a
-flagship subscription/API model. Prefer a profile abstraction so flags stay clear and policy
-lives in config.
+**Engine.** Start it detached from the repo directory:
 
 ```bash
-uv run companion --root . watch --profile local-qwen3-coder
-uv run companion --root . watch --profile local-fast
-uv run companion --root . watch --profile flagship
+cd ~/repos/devcompanion
+setsid nohup env PYTHONPATH=src .venv/bin/python -m devcompanion.cli \
+  --root /home/iqqe/repos/devcompanion --model qwen3-coder:30b --keep-alive 30m watch \
+  >> .companion/watch.log 2>&1 < /dev/null &
 ```
 
-- `local-qwen3-coder`: Ollama `qwen3-coder:30b`, 4K starting context, local content only.
-- `local-fast`: Ollama `qwen2.5-coder:3b`, fallback or latency comparison.
-- `flagship`: authenticated provider endpoint, only if project policy permits remote content.
+**Restart it whenever engine code changes:**
+1. Find it with the **anchored** pattern `pgrep -f '^\.venv/bin/python -m devcompanion.cli'`. An
+   unanchored pattern also matches the calling shell.
+2. Kill the **literal pid**. The Bash tool's shell is zsh, which does not split an unquoted `$var`:
+   `for p in $pids` hands `kill` one word and the kill fails. It happened in pass 7.
+3. Wait for it to exit: `tail --pid=<pid> -f /dev/null`.
+4. Start it, then confirm `engine.json`'s `pid` is the new live process and `pgrep` lists exactly one
+   engine.
 
-Per-profile settings: endpoint, model id, timeout, max input budget, content-sharing policy.
-Avoid letting `-p` mean both provider and profile unless the CLI help is explicit.
+If the kill failed anyway, the guard now makes the new engine exit with
+`another engine (pid N) is already watching …` in `watch.log`.
 
-What a flagship model receives:
+**Rejudging live claims.** To re-derive fresh caller claims with changed caller code, stop the
+engine, then rebuild each claim's task from the snapshot store: `detect(path, snap.get(baseline),
+snap.get(sha))`, then `Engine._investigate`. Take `instance.claim` first. The pass 7 script was
+scratch; rewrite it if needed.
 
-- A system/task instruction: summarize evidence, cite sources, invent nothing.
-- The task kind: one-sentence caller suggestion, diagnostic explanation, investigation advice,
-  architecture discussion.
-- Manifest references: relevant snippets, hashes, document versions, saved/unsaved status,
-  generation id. The analysis manifest already exists (`view.manifest()`), so this is now a
-  matter of selection rather than construction.
-- Tool evidence: caller verdicts, diagnostics, test results, stale/current status.
-- Selected QMD passages only when needed, each with source path, hash/revision, document
-  status, and query provenance.
-- Optional user goal text. The engine already accepts and records `goal` events.
-- A strict output schema: summary, next action, confidence, unknowns, citations.
+**Neovim.** `~/.config/nvim/lua/plugins/devcompanion.lua` loads the plugin: `<leader>aa` panel,
+`<leader>as` info, and the lualine count. Run `:CompanionStart` from a real file buffer. Lua changes
+need a Neovim restart. Autosave is on everywhere except in workspaces the companion observes.
 
-The model does not receive the whole repository by default, and does not decide freshness. The
-coordinator accepts a model result only if its parent manifest is still current.
+**Models and tools.**
+- **Ollama** 0.33.3, as a system service. `systemctl start ollama` works through polkit; `sudo`
+  needs a password.
+- **Installed models:** `qwen3-coder:30b` (~17 GB RAM while loaded), `qwen2.5-coder:3b`, `qwen3:4b`
+  and others.
+- **Memory:** the machine ran out once, with the 30B, a CPU-only 3B, three Codex processes and a game
+  at once.
+- **basedpyright** 1.38.0 comes from Mason (`~/.local/share/nvim/mason/bin/basedpyright`), not
+  `PATH`.
+- **Subscription CLIs**, only through `llm/providers.py`: `claude` 2.1.270 (Claude Max; `--bare`
+  needs an API key) and `codex` 0.153.4 (not tested further).
 
-## Standing decisions (conversation, 2026-09-14)
+## Standing decisions
 
-These were settled in conversation and are recorded so they are not relitigated. Each has a
-document; this is the index.
+Settled in conversation; do not relitigate without the user.
 
 | Decision | Where |
 |---|---|
+| Latency measurement is finished; evaluation measures hit rate only, on the 30B, where missing | this file |
+| No flagship benchmarking on the prose functions or on jobs a small model does; Codex not tested further | this file |
+| Chatty bar: more than 1 unusable of 6 → flagship | [chatty-functions.md](evaluations/chatty-functions.md) |
+| Explain, plan, write docs → flagship; `local-only` says what is local instead | [function-routing.md](evaluations/function-routing.md) |
+| Grill: flagship one richer question per turn; the 30B's three-question prompt in `local-only` | [chatty-functions.md](evaluations/chatty-functions.md) |
+| Commit message: constrained `subject:` / `body:` prompt on the 30B; long subjects reported, not cut | [pulled/chatty.py](../src/devcompanion/pulled/chatty.py) |
+| Local prompts: one thing and a stop, not a format; but the 30B does not rank, so give it a short list where the job is choosing | [model-routing.md](model-routing.md) |
+| The 30B is the resident specialist; the flagship is a provider-agnostic configuration role | [model-routing.md](model-routing.md), [configuration.md](configuration.md) |
+| A new warning is noted beside the ✓; a new error refuses | [fix/check.py](../src/devcompanion/fix/check.py) |
+| The 30B proposes unasked fixes; the 3B stays out of fixes; diagnostic sentences on the 3B on the CPU | [function-routing.md](evaluations/function-routing.md) |
+| One fix resolving several problems is one fix | [contract.md](contract.md) |
+| A fix is checked against the whole project, and applied only to the bytes it was checked on | [fix/project.py](../src/devcompanion/fix/project.py), [edit-actions.md](edit-actions.md) |
+| A call site counts only where the function is reachable | [investigate/callers.py](../src/devcompanion/investigate/callers.py) |
+| One engine per workspace, enforced by a lock | [instance.py](../src/devcompanion/instance.py) |
+| Documentation: surfacing is local, writing is the flagship's | [code-documentation.md](code-documentation.md) |
 | Routing is decided by who asked (passive vs pulled), not by model size | [model-routing.md](model-routing.md) |
-| S8, the laptop constraint, is **backlogged not retired**; target is the current host | [model-routing.md](model-routing.md) |
-| Subscription providers are CLI agents (Claude Code, Codex), not HTTP APIs | [providers.md](providers.md) |
-| opencode is **deferred** | [providers.md](providers.md) |
-| A provider is not enabled until a tripwire test proves it cannot edit files | [providers.md](providers.md) |
-| A repo file may request remote content sharing; only machine config may grant it | [configuration.md](configuration.md) |
-| Routing lives in configuration as data, not in `if` statements | [configuration.md](configuration.md) |
-| Test policy default is `draft` | [configuration.md](configuration.md) |
-| Do not port the engine to Rust; extract a component, and not while the design is moving | [configuration.md](configuration.md) |
-| Edits are in scope; the engine never writes a developer file — the adapter applies to a buffer | [edit-actions.md](edit-actions.md) |
+| Trust levels ✓ fact, ✓ checked, ◇ advice; ◇ never appears unasked | [model-routing.md](model-routing.md) |
+| Routing is per function, as ordered chains; the gate belongs to the function | [configuration.md](configuration.md) |
+| `local-only` is the default; an empty chain is unavailable, never silently rerouted | [configuration.md](configuration.md) |
+| A repo file may request remote sharing; only machine config grants it | [configuration.md](configuration.md) |
+| ✓ means checked, never "correct" | [fix/check.py](../src/devcompanion/fix/check.py) |
+| Deterministic tools discover facts; a model compresses or connects them | [model-routing.md](model-routing.md) |
+| Completion stays outside the companion | [model-routing.md](model-routing.md) |
+| Providers are CLI agents invoked tool-less, after a tripwire test proves they cannot edit files | [providers.md](providers.md) |
+| The engine never writes a developer file; the adapter applies edits to a buffer, unsaved | [edit-actions.md](edit-actions.md) |
 | Agent delegation runs in a throwaway worktree and returns a diff | [edit-actions.md](edit-actions.md) |
-| Modes and skills are different things; modes are pulled-tier only and never escalate permissions | [skills-and-modes.md](skills-and-modes.md) |
-| Skills use the portable `SKILL.md` subset; everything else is namespaced under `devcompanion/` | [skills-and-modes.md](skills-and-modes.md) |
-| Capability negotiation checks tools **and** context budget, not tools alone | [skills-and-modes.md](skills-and-modes.md) |
-| A repository may offer a skill; only machine config may enable one. Modes are machine-scope only | [skills-and-modes.md](skills-and-modes.md) |
-| `qwen3-coder` is the reference implementation — the floor a skill must clear, not the ceiling | [skills-and-modes.md](skills-and-modes.md) |
-
-Open, pending a live coding test: whether a *proposed edit* is worth having at all, judged
-once the model's paragraphs have been seen in real use.
-
-## Next implementation order
-
-1. **The live coding test is running and unfinished.** The engine is wired, the model answers,
-   the pane renders. What is missing is a judgement: are the sentences worth having? That
-   answer gates whether proposed edits ([edit-actions.md](edit-actions.md)) get built at all,
-   and it is the only item here that cannot be worked around.
-
-   Two observations already on the table from the first minutes of use:
-
-   - The panel echoes editor diagnostics the developer can already see in their sign column and
-     virtual text — four of five entries in the first real session. **Partly addressed by the UI
-     pass:** diagnostics are no longer echoed but grouped into problems and said as sentences,
-     with the raw messages behind `d`. Still open: whether errors in a file that is open belong
-     in the panel at all, or only those the editor cannot already show.
-   - A diagnostic finding repeated its title verbatim in its evidence line. **Fixed by the UI
-     pass:** the title is the engine's sentence, and the raw message appears only on `d`.
-
-2. **Provider abstraction.** The Ollama path is built; the two CLI providers (Claude Code,
-   Codex) are not, and neither is the tripwire test that must gate each one. opencode is
-   deferred. See [providers.md](providers.md).
-
-3. **Configuration loading** — three scopes, the routing table, `companion config --effective`.
-   Nothing remote is enabled until `--effective` can print the bytes that would be sent.
-   Includes skill discovery and capability negotiation
-   ([skills-and-modes.md](skills-and-modes.md)); author the passive tier's own prompts as
-   skills to exercise it before any chat surface exists.
-
-4. **Edit actions**, in the order in [edit-actions.md](edit-actions.md) — outbox writer,
-   adapter buffer-apply and freshness refusal first, because refusal must exist before the
-   first edit ships. Gated on item 1.
-
-5. **QMD project warmup and provenance-filtered retrieval**, through the existing `context`
-   field.
-
-6. **Snapshot store read costs.** `history()` re-parses a whole JSONL file per call and
-   `latest()`/`previous()` call it repeatedly; `known_paths()` reads every history file. This
-   is what will hurt on a many-worktree repository, and it is algorithmic — fix it before
-   anyone reaches for a faster language.
-
-7. **Dismiss.** Logged and ignored. Honouring one needs a suppression record keyed to the
-   evidence, so it expires when the evidence changes.
-
-8. **The Chat surface**, and only then modes. Modes are a routing key and a prompt prefix — the
-   cheap half. The conversation they need does not exist.
+| Modes and skills differ; modes are pulled-tier only, never escalate permissions, and wait for Chat | [skills-and-modes.md](skills-and-modes.md) |
+| Diagnostic interpretation is engine-side and deterministic; a model may rewrite sentences, never grouping or facts | [problems.py](../src/devcompanion/present/problems.py) |
+| Nothing opens or takes focus on its own; no key or UI for a capability that does not exist | [nvim/README.md](../nvim/README.md) |
+| Do not port the engine to Rust while the design is moving | [configuration.md](configuration.md) |
 
 ## Known risks and edges
 
-- The intake watermark is implemented ([intake-watermark.md](intake-watermark.md)) but the
-  inbox still grows without bound: the watermark makes restart cost O(1), which turns growth
-  into a disk-space question rather than a correctness one. Compaction races with the adapter's
-  appends and needs its own design.
-- A file changed on disk while the engine was down is still missed. `fswatch` has no durable
-  position; a startup rescan against the snapshot store is a separate mechanism.
-- An event accepted but whose investigation had not finished when the engine died is not
-  re-investigated. The content is snapshotted so nothing is lost, but no claim is derived until
-  that path changes again.
-- Tests on unsaved code need a separate materialized runner. The MVP analyses unsaved code and
-  runs tests only after saves, and says so; running them against a materialized overlay is a
-  later decision, not an oversight.
-- Multiple active Neovim sessions for one workspace are deferred. The engine follows one
-  session at a time: a new `session` id clears the previous one's overlays, which is correct
-  for handoff between editors and wrong for two editors at once. Conflict reporting is unbuilt.
-- A file written by something other than the editor while a buffer is dirty keeps its overlay,
-  by design. The pane shows both the unsaved buffer and the file's revision, but there is no
-  explicit conflict state yet.
-- QMD warmup and Ollama model loading may compete for RAM/GPU. Measure them together before
-  enabling broad retrieval by default.
-- 16 hex characters of sha256 is an equality check on developer-authored content, not a defence
-  against a chosen-prefix attack. A collision surfaces as one stale finding.
-- Rotation or truncation of the inbox **while the engine is running** is not detected and
-  silently drops events. Nothing in-tree triggers it, and the trap for whoever fixes it is
-  recorded in [intake-watermark.md](intake-watermark.md)'s Known limits.
-- The engine has only ever been run against Python. Detection and caller judgement are
-  Python-specific despite S6 calling for language-agnosticism through language servers.
+**Operations**
+- **Restarts:** engine code changes need an engine restart; Lua changes need a Neovim restart.
+- **Unlocked commands:** `ingest` and `replay` take no lock; never run them against a watched
+  workspace's state directory.
+- **Model status hides bugs:** the model client maps every exception to a status, so a programming
+  error looks like an unavailable model.
+- **Memory:** the 30B plus other loads can exhaust RAM.
+- **Orphaned children:** a killed wrapper shell may not kill its Python child; check with an anchored
+  `pgrep` before resuming anything that writes shared files.
+- **Harness timeouts:** the harness gives the unit suite 300 s and every other command 30 s. A slower
+  command needs its own timeout (`run(..., timeout=)`).
 
-## What was promoted to the global knowledge base
+**Checking and fixes**
+- **Caller reachability matches imports syntactically.** Two modules with the same dotted tail are not
+  told apart. A method on a receiver of unknown type is `unsure`, never `breaks`.
+- **The gate checks types, not behaviour.** A checked fix can still be the wrong fix.
+- **At most 3 problems per revision get a fix**, and declined fixes are forgotten when Neovim restarts.
+- **The flagship grill prompt has never been run**, by design (not benchmarked), and nothing calls it
+  yet.
 
-Durable, cross-project conclusions from this work live in `~/knowledge-global`, not here, per
-its rule that repo-specific layout stays in the repo. Searchable with a bare `qmd query`:
+**Coverage gaps**
+- The inbox grows without bound.
+- A file changed while the engine was down is missed until it changes again.
+- Tests never run on unsaved code.
+- One Neovim session per workspace; Python only.
 
-| Page | Domain |
+## History, compressed
+
+- **Passes 1–3** (2026-09-09…): engine skeleton, unsaved-buffer analysis, canonical text, intake
+  watermark, local model tier.
+- **Pass 4** (`90c0a98`…`b5aac42`): the panel redesign and its polish.
+- **Pass 5** (uncommitted):
+  - scoped the plugin's side effects (autosave, per-buffer debounce)
+  - trust levels and local-model scope
+  - the checked-fix gate and its corpus; three local models measured
+- **Pass 6** (uncommitted):
+  - the provider layer for Claude Code and Codex, and its tripwire
+  - fixes on the subscription models
+  - a function corpus from the project's own code, and hit rates for sentences, suspicious lines and
+    culprits
+  - routing chains replayed from stored rows
+  - the five prose functions judged on the 30B: explain and plan to the flagship
+- **Pass 7** (uncommitted):
+  - **Design:**
+    - the prompt design rule
+    - the resident specialist against the flagship
+    - `config.py` and `llm/route.py`
+    - the documentation-function design
+  - **Fixes:**
+    - the warnings rule, rejudged
+    - checked fixes proposed by the engine, and reviewed and applied from the panel
+    - the whole-project gate (step 5)
+    - merged fixes
+  - **Fixes to the engine:**
+    - the one-engine guard, after two engines ran on one workspace
+    - caller reachability, after 56 bogus rows in the user's panel; plus a dropped call on a removed
+      function's old `def` line
+  - **Measured** (the user started Ollama again): live 30B fixes; grill and commit re-measured, which
+    split grill between the flagship and the 30B
+- **Harness artifacts, not product bugs:**
+  - a stale swap file ate the tmux keystrokes
+  - the harness's 30 s unit-suite timeout became too short
+
+## Knowledge base
+
+`~/knowledge-global`, searchable with a bare `qmd query`. Last published at `b9a475d`. Unpublished,
+all linted:
+
+| Page | Collection |
 |---|---|
-| `models/qwen3-coder-30b` — sub-second warm, 25 s cold, usable only while resident | `global-ai-models` |
-| `gotchas/neovim-plugin-api-traps` — vim.NIL, unseeded math.random, buffer lines reject newlines, VimLeavePre | `global-lessons` |
-| `failures/tests-cover-only-the-staged-path` — staging the interesting case leaves the ordinary one untested | `global-lessons` |
-| `wisdom/run-it-before-believing-the-suite` — six defects, all from running, none from the suite | `global-lessons` |
-| `patterns/cross-language-content-hash` — fixtures verified against what the storage side writes | `global-engineering` |
-| `patterns/implement-review-run` — three verification layers catching disjoint defect classes | `global-agent-patterns` |
+| `patterns/checked-model-fixes` — the gate, its effect, what models actually send | `global-agent-patterns` |
+| `patterns/stop-conditions-not-formats` — ask a local model for one thing and a stop; it fixes format, not selection (draft) | `global-agent-patterns` |
+| `models/qwen3-coder-30b` — latency, fixes, prose: pads formats, cannot pick one point, fixes whole files | `global-ai-models` |
+| `models/qwen3-4b` — reasons in its reply despite `think: false` | `global-ai-models` |
+| `hardware/rtx-2080-super-8gb` — the 3B and 30B evict each other; CPU-only coexists | `global-ai-models` |
+| `gotchas/catch-all-hides-bugs-as-unavailability` | `global-lessons` |
+| `gotchas/zsh-does-not-split-unquoted-variables` — the restart that left two engines | `global-lessons` |
 
-## The live session
-
-A watcher is running against this repository with the model attached:
-
-```bash
-uv run companion --root . --model qwen3-coder:30b --keep-alive 30m watch
-```
-
-Restarted for the UI pass on 2026-09-14 with the same arguments, detached (`setsid nohup`), and
-logging to `.companion/watch.log` so the log no longer lives in a session's scratch directory.
-
-The Neovim side is registered as a lazy.nvim plugin, so `:CompanionStart` and
-`:CompanionPanel` are available without touching `runtimepath` by hand.
-
-**The operator's autosave is disabled for the duration** (both `InsertLeave`/`TextChanged` and
-`CursorHold` write autocmds, commented in their `init.lua` with a restore note and a backup).
-This matters more than it sounds: writing on `InsertLeave` means the buffer is saved the moment
-insert mode ends, so the unsaved-buffer window — the thing this project exists to observe —
-only existed while actively typing. With autosave on, a live test measures the saved-file path
-that already worked.
+Plus index and log entries in all three domains. Publish with `~/knowledge-global/publish.sh
+"message"`, never by hand, and only when the user asks.
 
 ## Useful commands
 
 ```bash
 uv sync --extra dev
-uv run pytest -q
-.venv/bin/python scripts/check-workflow.py
-./scripts/test-plugin.sh /tmp/smoke            # adapter alone, no engine
-./scripts/demo-phase1.sh /tmp/c1
-./scripts/demo-live-nvim.sh /tmp/c2
-uv run python scripts/evaluate-local-model.py --model qwen3-coder:30b
-uv run companion --root <dir> watch
-uv run companion --root <dir> ingest <paths>
-uv run companion --root <dir> --state <state-dir> replay examples/phase1-recording
+.venv/bin/python -m pytest -q                                   # ~31 s
+.venv/bin/python scripts/check-workflow.py                      # ~2 min
+PYTHONPATH=src .venv/bin/python -m devcompanion.cli --root . config --effective
+.venv/bin/python scripts/chatty.py report                       # prose functions against the bar
+.venv/bin/python scripts/evaluate-fixes.py --rejudge docs/evaluations/checked-fixes.json
+.venv/bin/python scripts/route-policies.py                      # replays stored rows, no model
+.venv/bin/python scripts/check-provider-tripwire.py claude:sonnet
+pgrep -af '^\.venv/bin/python -m devcompanion.cli'              # exactly one line
+tail -f .companion/watch.log
 ```
 
-## Current working tree note
+## Working tree
 
-This project directory sits inside a broader Git repository rooted at `/home/iqqe/repos`. Many
-sibling paths appear as untracked from Git's point of view. Do not clean or reset them. Keep
-edits scoped to `/home/iqqe/repos/devcompanion` unless the user asks otherwise.
+`~/repos` is a git repository that tracks only `devcompanion/` and a `.gitignore`. Sibling
+directories are untracked — do not clean or reset them. Commit and push only when the user asks.
+Other agent sessions have committed to this `main` before, so do not switch branches.

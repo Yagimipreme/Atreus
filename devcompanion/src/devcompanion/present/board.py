@@ -4,11 +4,13 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-ORDER = ["signature_change", "removed_function", "test_run", "new_function", "unknown_intent", "cancelled", "noop"]
+ORDER = ["signature_change", "removed_function", "test_run", "fix_proposal", "new_function", "unknown_intent",
+         "cancelled", "noop"]
 HEAD = {
     "signature_change": "Signature changes",
     "removed_function": "Removed functions",
     "test_run": "Tests touched by the change",
+    "fix_proposal": "Fix proposals (checked means the gate vouched for it, not that it is right)",
     "new_function": "New functions (test generation not enabled yet)",
     "unknown_intent": "Unknown intent (file mid-edit)",
     "cancelled": "Cancelled (superseded before it finished)",
@@ -38,6 +40,14 @@ def render(records: list[dict], root: Path, stats: dict | None = None) -> str:
         if kind == "noop":
             for r in rs:
                 out.append(f"- `{r['title']}`: {r['claim']}")
+            out.append("")
+            continue
+        if kind == "fix_proposal":
+            for r in rs:
+                d, why = r.get("details", {}), r["locations"][0]["reason"] if r["locations"] else ""
+                warned = f", {len(d['warnings'])} new warning(s)" if d.get("warnings") else ""
+                out.append(f"- `{r['title']}` {r['claim']}{warned}" + (f": {why}" if why else "")
+                           + (f" — {d['profile']}" if d.get("profile") else ""))
             out.append("")
             continue
         for r in rs:

@@ -1,0 +1,702 @@
+Checked-fix corpus. Read by scripts/evaluate-fixes.py; not collected by pytest.
+
+Each case is a working module. `break`/`to` is a mutation applied to it (exact text, once; `\n`
+is a newline) that produces the problem a model is asked to fix. The check after `--- check ---`
+runs against the module and must pass for the working code and fail for the broken code, so it
+separates the intended fix from one that merely satisfies the type checker. The check is never
+shown to the model or to the checker.
+
+Written by hand, 2026-09-14, to cover the diagnostic classes basedpyright reports most in
+day-to-day Python -- not collected from use.
+
+=== split-separator · argument-type
+break: line.split(",")
+   to: line.split(3)
+---
+def fields(line: str) -> list[str]:
+    """One CSV record, split into its comma-separated fields."""
+    return line.split(",")
+
+
+def header(text: str) -> list[str]:
+    """The column names: the fields of the first record."""
+    return fields(text.splitlines()[0])
+--- check ---
+assert fields("a,b,c") == ["a", "b", "c"]
+assert header("x,y\n1,2") == ["x", "y"]
+
+=== round-places · argument-type
+break: round(amount, 2)
+   to: round(amount, "2")
+---
+def price_label(amount: float, currency: str = "EUR") -> str:
+    """A price for display, rounded to cents."""
+    return f"{round(amount, 2)} {currency}"
+--- check ---
+assert price_label(3.14159) == "3.14 EUR"
+
+=== parse-count · argument-type
+break: count = int(raw)
+   to: count = raw
+---
+def indices(raw: str) -> list[int]:
+    """Indices 0..n-1 for a count the user typed as text."""
+    count = int(raw)
+    return list(range(count))
+--- check ---
+assert indices("3") == [0, 1, 2]
+
+=== join-numbers · argument-type
+break: ", ".join(str(n) for n in numbers)
+   to: ", ".join(numbers)
+---
+def listing(numbers: list[int]) -> str:
+    """Ticket numbers as one comma-separated line."""
+    return ", ".join(str(n) for n in numbers)
+--- check ---
+assert listing([4, 8, 15]) == "4, 8, 15"
+
+=== byte-order · argument-type
+break: int.from_bytes(data, "big")
+   to: int.from_bytes(data, 1)
+---
+def packet_length(header: bytes) -> int:
+    """The length field of a packet: the first two header bytes, big-endian."""
+    data = header[:2]
+    return int.from_bytes(data, "big")
+--- check ---
+assert packet_length(b"\x01\x00rest") == 256
+
+=== timedelta-days · argument-type
+break: timedelta(days=7)
+   to: timedelta(days="7")
+---
+from datetime import date, timedelta
+
+
+def next_review(last: date) -> date:
+    """Reviews happen weekly: the date one week after the last one."""
+    return last + timedelta(days=7)
+--- check ---
+assert next_review(date(2024, 1, 1)) == date(2024, 1, 8)
+
+=== path-join-year · argument-type
+break: os.path.join(root, str(year), name)
+   to: os.path.join(root, year, name)
+---
+import os
+
+
+def archive_path(root: str, year: int, name: str) -> str:
+    """Where a report is archived: <root>/<year>/<name>."""
+    return os.path.join(root, str(year), name)
+--- check ---
+assert archive_path("/srv", 2024, "q1.pdf") == "/srv/2024/q1.pdf"
+
+=== len-of-number · argument-type
+break: len(str(number))
+   to: len(number)
+---
+def digits(number: int) -> int:
+    """How many decimal digits a non-negative number has."""
+    return len(str(number))
+--- check ---
+assert digits(1234) == 4
+
+=== sum-strings · argument-type
+break: "".join(parts)
+   to: sum(parts)
+---
+def concatenate(parts: list[str]) -> str:
+    """The parts joined end to end, with nothing in between."""
+    return "".join(parts)
+--- check ---
+assert concatenate(["ab", "cd"]) == "abcd"
+
+=== missing-carry · missing-argument
+break: return add(a, b, 0)
+   to: return add(a, b)
+---
+def add(a: int, b: int, carry: int) -> int:
+    """One column of long addition: two digits and the carry from the column before."""
+    return a + b + carry
+
+
+def first_column(a: int, b: int) -> int:
+    """The rightmost column, where nothing has been carried in yet."""
+    return add(a, b, 0)
+--- check ---
+assert first_column(4, 5) == 9
+
+=== missing-timeout · missing-argument
+break: return fetch(url, DEFAULT_TIMEOUT)
+   to: return fetch(url)
+---
+DEFAULT_TIMEOUT = 5.0
+
+
+def fetch(url: str, timeout: float) -> str:
+    return f"GET {url} (timeout {timeout}s)"
+
+
+def fetch_default(url: str) -> str:
+    """Fetch with the project's default timeout."""
+    return fetch(url, DEFAULT_TIMEOUT)
+--- check ---
+assert fetch_default("/health") == "GET /health (timeout 5.0s)"
+
+=== missing-note · missing-argument
+break: account.deposit(amount, "opening balance")
+   to: account.deposit(amount)
+---
+class Account:
+    def __init__(self) -> None:
+        self.balance = 0
+        self.notes: list[str] = []
+
+    def deposit(self, amount: int, note: str) -> None:
+        self.balance += amount
+        self.notes.append(note)
+
+
+def open_account(amount: int) -> Account:
+    """A new account holding its opening deposit."""
+    account = Account()
+    account.deposit(amount, "opening balance")
+    return account
+--- check ---
+acct = open_account(10)
+assert acct.balance == 10 and len(acct.notes) == 1
+
+=== strptime-format · missing-argument
+break: datetime.strptime(text, "%Y-%m-%d")
+   to: datetime.strptime(text)
+---
+from datetime import datetime
+
+
+def parse_day(text: str) -> datetime:
+    """A day written as an ISO date, e.g. '2024-05-01'."""
+    return datetime.strptime(text, "%Y-%m-%d")
+--- check ---
+assert parse_day("2024-05-01") == datetime(2024, 5, 1)
+
+=== method-on-class · missing-argument
+break: return Parser().parse(text)
+   to: return Parser.parse(text)
+---
+class Parser:
+    def __init__(self) -> None:
+        self.separator = "="
+
+    def parse(self, text: str) -> tuple[str, str]:
+        key, _, value = text.partition(self.separator)
+        return key.strip(), value.strip()
+
+
+def setting(text: str) -> tuple[str, str]:
+    return Parser().parse(text)
+--- check ---
+assert setting("color = blue") == ("color", "blue")
+
+=== extra-middle · too-many-arguments
+break: return display_name(person["first"], person["last"])
+   to: return display_name(person["first"], person["middle"], person["last"])
+---
+def display_name(first: str, last: str) -> str:
+    return f"{first} {last}"
+
+
+def byline(person: dict[str, str]) -> str:
+    """Author line for an article: first and last name only."""
+    return display_name(person["first"], person["last"])
+--- check ---
+assert byline({"first": "Ada", "middle": "King", "last": "Lovelace"}) == "Ada Lovelace"
+
+=== keyword-renamed · unknown-keyword
+break: ledger.post(amount, note="rent")
+   to: ledger.post(amount, memo="rent")
+---
+class Ledger:
+    def __init__(self) -> None:
+        self.entries: list[tuple[int, str]] = []
+
+    def post(self, amount: int, note: str) -> None:
+        self.entries.append((amount, note))
+
+
+def pay_rent(ledger: Ledger, amount: int) -> None:
+    ledger.post(amount, note="rent")
+--- check ---
+ledger = Ledger()
+pay_rent(ledger, 900)
+assert ledger.entries == [(900, "rent")]
+
+=== dataclass-field · unknown-keyword
+break: User(name=name, email=email)
+   to: User(name=name, mail=email)
+---
+from dataclasses import dataclass
+
+
+@dataclass
+class User:
+    name: str
+    email: str
+
+
+def register(name: str, email: str) -> User:
+    return User(name=name, email=email)
+--- check ---
+assert register("ada", "ada@example.org").email == "ada@example.org"
+
+=== sorted-key · unknown-keyword
+break: sorted(words, key=len)
+   to: sorted(words, by=len)
+---
+def shortest_first(words: list[str]) -> list[str]:
+    """Words ordered by length, shortest first."""
+    return sorted(words, key=len)
+--- check ---
+assert shortest_first(["ccc", "a", "bb"]) == ["a", "bb", "ccc"]
+
+=== splitlines-keepends · unknown-keyword
+break: text.splitlines(keepends=True)
+   to: text.splitlines(keep_ends=True)
+---
+def raw_lines(text: str) -> list[str]:
+    """The lines of a file with their line endings, so they can be written back unchanged."""
+    return text.splitlines(keepends=True)
+--- check ---
+assert raw_lines("a\nb") == ["a\n", "b"]
+
+=== regex-no-match · optional-member-access
+break: if match is None:\n        return ""\n    return
+   to: return
+---
+import re
+
+
+def version(tag: str) -> str:
+    """The x.y.z version inside a release tag like 'v1.2.3', or '' when there is none."""
+    match = re.match(r"v(\d+\.\d+\.\d+)", tag)
+    if match is None:
+        return ""
+    return match.group(1)
+--- check ---
+assert version("v1.2.3") == "1.2.3"
+assert version("nightly") == ""
+
+=== next-default · optional-member-access
+break: first.upper() if first else ""
+   to: first.upper()
+---
+def shout_first(words: list[str], prefix: str) -> str:
+    """The first word starting with prefix, upper-cased; '' when no word does."""
+    first = next((w for w in words if w.startswith(prefix)), None)
+    return first.upper() if first else ""
+--- check ---
+assert shout_first(["apple", "avocado"], "av") == "AVOCADO"
+assert shout_first([], "x") == ""
+
+=== xml-find · optional-member-access
+break: if title is None or title.text is None:\n        return "untitled"\n    return
+   to: return
+---
+import xml.etree.ElementTree as ET
+
+
+def feed_title(xml: str) -> str:
+    """The feed's <title>, or 'untitled' when it has none."""
+    root = ET.fromstring(xml)
+    title = root.find("title")
+    if title is None or title.text is None:
+        return "untitled"
+    return title.text
+--- check ---
+assert feed_title("<feed><title>News</title></feed>") == "News"
+assert feed_title("<feed/>") == "untitled"
+
+=== dict-get-default · optional-operand
+break: ages.get(name, 0)
+   to: ages.get(name)
+---
+def age_next_year(ages: dict[str, int], name: str) -> int:
+    """Next year's age; someone not in the register is treated as a newborn (age 0 now)."""
+    return ages.get(name, 0) + 1
+--- check ---
+assert age_next_year({"ada": 36}, "ada") == 37
+assert age_next_year({}, "bob") == 1
+
+=== optional-greeting · optional-operand
+break: (name or "world")
+   to: name
+---
+def greeting(name: str | None = None) -> str:
+    """'Hello, <name>', or 'Hello, world' when nobody is named."""
+    return "Hello, " + (name or "world")
+--- check ---
+assert greeting("Ada") == "Hello, Ada"
+assert greeting() == "Hello, world"
+
+=== import-path · undefined-name
+break: from pathlib import Path\n
+   to:
+---
+from pathlib import Path
+
+
+def extension(filename: str) -> str:
+    """The file extension without the dot: 'archive.tar.gz' reports 'gz'."""
+    return Path(filename).suffix.lstrip(".")
+--- check ---
+assert extension("archive.tar.gz") == "gz"
+
+=== import-defaultdict · undefined-name
+break: from collections import defaultdict\n
+   to:
+---
+from collections import defaultdict
+
+
+def by_initial(names: list[str]) -> dict[str, list[str]]:
+    """Names grouped under their first letter."""
+    groups: defaultdict[str, list[str]] = defaultdict(list)
+    for name in names:
+        groups[name[0]].append(name)
+    return dict(groups)
+--- check ---
+assert by_initial(["ada", "alan", "bob"]) == {"a": ["ada", "alan"], "b": ["bob"]}
+
+=== import-field · undefined-name
+break: from dataclasses import dataclass, field
+   to: from dataclasses import dataclass
+---
+from dataclasses import dataclass, field
+
+
+@dataclass
+class Cart:
+    items: list[str] = field(default_factory=list)
+
+    def add(self, item: str) -> None:
+        self.items.append(item)
+--- check ---
+a, b = Cart(), Cart()
+a.add("tea")
+assert b.items == []
+
+=== typo-total · undefined-name
+break: return total
+   to: return totl
+---
+def invoice_total(lines: list[tuple[str, float]]) -> float:
+    """Sum of the line amounts on an invoice."""
+    total = 0.0
+    for _, amount in lines:
+        total += amount
+    return total
+--- check ---
+assert invoice_total([("tea", 2.5), ("cake", 3.0)]) == 5.5
+
+=== renamed-helper · undefined-name
+break: return [_normalise(tag) for tag in tags]
+   to: return [_normalize(tag) for tag in tags]
+---
+def _normalise(tag: str) -> str:
+    return tag.strip().lower()
+
+
+def clean_tags(tags: list[str]) -> list[str]:
+    """Tags trimmed and lower-cased."""
+    return [_normalise(tag) for tag in tags]
+--- check ---
+assert clean_tags([" Python ", "NEOVIM"]) == ["python", "neovim"]
+
+=== startswith-typo · attribute
+break: line.startswith("#")
+   to: line.startwith("#")
+---
+def code_lines(text: str) -> list[str]:
+    """Lines of a config file that are not comments (comments start with '#')."""
+    return [line for line in text.splitlines() if not line.startswith("#")]
+--- check ---
+assert code_lines("# note\nx = 1") == ["x = 1"]
+
+=== list-push · attribute
+break: stack.append(token)
+   to: stack.push(token)
+---
+def reverse_tokens(tokens: list[str]) -> list[str]:
+    """Tokens in reverse order, using an explicit stack."""
+    stack: list[str] = []
+    for token in tokens:
+        stack.append(token)
+    return [stack.pop() for _ in range(len(stack))]
+--- check ---
+assert reverse_tokens(["a", "b", "c"]) == ["c", "b", "a"]
+
+=== dict-iteritems · attribute
+break: prices.items()
+   to: prices.iteritems()
+---
+def cheap(prices: dict[str, float], limit: float) -> list[str]:
+    """Names of products that cost less than limit."""
+    return [name for name, price in prices.items() if price < limit]
+--- check ---
+assert cheap({"tea": 2.0, "wine": 12.0}, 5.0) == ["tea"]
+
+=== enum-member-typo · attribute
+break: Light.GREEN if
+   to: Light.GREN if
+---
+from enum import Enum
+
+
+class Light(Enum):
+    RED = "red"
+    AMBER = "amber"
+    GREEN = "green"
+
+
+def after(light: Light) -> Light:
+    """The next light in the cycle red -> green -> amber -> red."""
+    return Light.GREEN if light is Light.RED else Light.AMBER if light is Light.GREEN else Light.RED
+--- check ---
+assert after(Light.RED) is Light.GREEN
+assert after(Light.GREEN) is Light.AMBER
+assert after(Light.AMBER) is Light.RED
+
+=== self-attribute-typo · attribute
+break: return self.balance >= amount
+   to: return self.balence >= amount
+---
+class Wallet:
+    def __init__(self, balance: int) -> None:
+        self.balance = balance
+
+    def can_afford(self, amount: int) -> bool:
+        return self.balance >= amount
+--- check ---
+assert Wallet(10).can_afford(5)
+assert not Wallet(1).can_afford(5)
+
+=== missing-await · async
+break: body = await fetch_body(url)
+   to: body = fetch_body(url)
+---
+import asyncio
+
+
+async def fetch_body(url: str) -> str:
+    await asyncio.sleep(0)
+    return f"<html>{url}</html>"
+
+
+async def title_of(url: str) -> str:
+    body = await fetch_body(url)
+    return body.removeprefix("<html>").removesuffix("</html>")
+--- check ---
+assert asyncio.run(title_of("home")) == "home"
+
+=== property-called · call
+break: return shape.area * count
+   to: return shape.area() * count
+---
+class Square:
+    def __init__(self, side: float) -> None:
+        self.side = side
+
+    @property
+    def area(self) -> float:
+        return self.side * self.side
+
+
+def tiles_needed(shape: Square, count: int) -> float:
+    return shape.area * count
+--- check ---
+assert tiles_needed(Square(2.0), 3) == 12.0
+
+=== returns-list-not-count · return-type
+break: return len(text.split())
+   to: return text.split()
+---
+def word_count(text: str) -> int:
+    """How many whitespace-separated words the text has."""
+    return len(text.split())
+--- check ---
+assert word_count("to be or not") == 4
+
+=== returns-optional · return-type
+break: users.get(user_id, "anonymous")
+   to: users.get(user_id)
+---
+def author(users: dict[int, str], user_id: int) -> str:
+    """Display name for a comment's author; deleted users show as 'anonymous'."""
+    return users.get(user_id, "anonymous")
+--- check ---
+assert author({1: "ada"}, 1) == "ada"
+assert author({}, 2) == "anonymous"
+
+=== missing-return · return-type
+break: \n    return "odd"
+   to:
+---
+def parity(n: int) -> str:
+    """'even' or 'odd'."""
+    if n % 2 == 0:
+        return "even"
+    return "odd"
+--- check ---
+assert parity(4) == "even"
+assert parity(3) == "odd"
+
+=== returns-set · return-type
+break: return sorted(set(names))
+   to: return set(names)
+---
+def roster(names: list[str]) -> list[str]:
+    """Each name once, in alphabetical order."""
+    return sorted(set(names))
+--- check ---
+assert roster(["bob", "ada", "bob"]) == ["ada", "bob"]
+
+=== price-times · return-type
+break: len(items) * float(price)
+   to: len(items) * price
+---
+def order_total(items: list[str], price: str) -> float:
+    """Every item costs the same; the price comes from a text field."""
+    return len(items) * float(price)
+--- check ---
+assert order_total(["a", "b"], "1.5") == 3.0
+
+=== str-plus-int · operator
+break: "items: " + str(count)
+   to: "items: " + count
+---
+def badge(count: int) -> str:
+    """Cart badge text, e.g. 'items: 3'."""
+    return "items: " + str(count)
+--- check ---
+assert badge(3) == "items: 3"
+
+=== text-sum · operator
+break: return int(a) + int(b)
+   to: return a + int(b)
+---
+def add_fields(a: str, b: str) -> int:
+    """The sum of two numbers read from form fields."""
+    return int(a) + int(b)
+--- check ---
+assert add_fields("2", "3") == 5
+
+=== tuple-unpack · assignment
+break: name, _, domain = address.partition("@")
+   to: name, domain = address.partition("@")
+---
+def mail_domain(address: str) -> str:
+    """The part of an e-mail address after the '@'."""
+    name, _, domain = address.partition("@")
+    return domain if name else ""
+--- check ---
+assert mail_domain("ada@example.org") == "example.org"
+
+=== annotated-assignment · assignment
+break: timeout: float = float(raw)
+   to: timeout: float = raw
+---
+def parse_timeout(raw: str) -> float:
+    """Seconds, from a configuration value such as '2.5'."""
+    timeout: float = float(raw)
+    return max(timeout, 0.0)
+--- check ---
+assert parse_timeout("2.5") == 2.5
+
+=== possibly-unbound-else · possibly-unbound
+break:     else:\n        letter = "C"\n
+   to:
+---
+def grade(score: int) -> str:
+    """A for 90 and up, B for 50 and up, C below that."""
+    if score >= 90:
+        letter = "A"
+    elif score >= 50:
+        letter = "B"
+    else:
+        letter = "C"
+    return letter
+--- check ---
+assert grade(95) == "A"
+assert grade(10) == "C"
+
+=== unbound-after-except · possibly-unbound
+break: data = {}
+   to: pass
+---
+import json
+
+
+def load_settings(text: str) -> dict[str, object]:
+    """Parsed settings; malformed JSON counts as no settings at all."""
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        data = {}
+    return data
+--- check ---
+assert load_settings('{"a": 1}') == {"a": 1}
+assert load_settings("{") == {}
+
+=== missing-colon · syntax
+break: def is_blank(line: str) -> bool:
+   to: def is_blank(line: str) -> bool
+---
+def is_blank(line: str) -> bool:
+    """True for lines holding only whitespace."""
+    return not line.strip()
+
+
+def blank_count(text: str) -> int:
+    return sum(1 for line in text.splitlines() if is_blank(line))
+--- check ---
+assert blank_count("a\n\n  \nb") == 2
+
+=== unclosed-paren · syntax
+break: max(values, key=abs)
+   to: max(values, key=abs
+---
+def largest_magnitude(values: list[int]) -> int:
+    """The value furthest from zero, keeping its sign."""
+    return max(values, key=abs)
+--- check ---
+assert largest_magnitude([3, -7, 5]) == -7
+
+=== from-without-import · syntax
+break: from math import hypot
+   to: from math hypot
+---
+from math import hypot
+
+
+def distance(x: float, y: float) -> float:
+    """Distance of a point from the origin."""
+    return hypot(x, y)
+--- check ---
+assert distance(3.0, 4.0) == 5.0
+
+=== dict-missing-comma · syntax
+break: "low": 1,
+   to: "low": 1
+---
+LEVELS = {
+    "low": 1,
+    "medium": 2,
+    "high": 3,
+}
+
+
+def level(name: str) -> int:
+    return LEVELS[name]
+--- check ---
+assert level("medium") == 2

@@ -17,19 +17,19 @@ from pathlib import Path
 from .evidence.store import Evidence, EvidenceStore
 from .investigate import callers, tests as testrun
 from .observe import events as ev
-from .present import board, findings as findings_out, status as status_out
+from .present import board, findings as findings_out, problems, status as status_out
 from .schedule.detect import Task, detect
 from .schedule.queue import Scheduler
 from .snapshot.store import SnapshotStore
 from .view.index import ContentView
 
 #: Events that say something about a path's content rather than about the session.
-SESSION_KINDS = {"goal", "dismiss", "request", "lsp_result", "session_end"}
+SESSION_KINDS = {"goal", "dismiss", "request", "lsp_result", "session_end", "action_result"}
 
 
 class Engine:
     def __init__(self, root: Path, state_dir: Path | None = None, run_tests: bool = True,
-                 llm: dict | None = None, log=print, replay: bool = False):
+                 llm: dict | None = None, log=print, replay: bool = False, config=None, ask=None):
         self.root = root.resolve()
         self.replay = replay      # replay: never touch disk; content and callers come from snapshots
         self.dir = (state_dir or self.root / ".companion").resolve()
@@ -38,9 +38,11 @@ class Engine:
         self.view = ContentView(self.root, self.snap, self.dir, replay=replay)
         self.evid = EvidenceStore(self.dir)
         self.events_log = self.dir / "events.jsonl"
-        self.sched = Scheduler(self._run_bundle)
+        self.sched = Scheduler(self._run_bundle, handlers={"fix": self._run_fixes})
         self.run_tests = run_tests
         self.llm = llm            # {"model","backend","base_url","cpu_only"} or None
+        self.config = config      # config.Config when the model tier is on; checked fixes route through it
+        self.ask = ask            # providers.ask, or a stand-in in tests
         self.log = log
         self.seq, self.accepted_editor_seqs = self._scan_events_log()
         self.timings: list[dict] = []
@@ -96,6 +98,8 @@ class Engine:
             n = sum(d.get("severity") == "error" for d in (e.items or []))
             self.log(f"  diagnostics: {e.path}: {len(e.items or [])} item(s), {n} error(s)")
             self.publish()
+            if n:
+                self._queue_fixes(e.path)
             return
 
         content, origin = self._resolve_content(e, content)
@@ -199,6 +203,10 @@ class Engine:
             self.log(f"  lsp_result: {e.method} {e.status} ({len(e.items or [])} item(s))")
         elif e.kind == "request":
             self.log(f"  request: {e.what} {e.path or ''}".rstrip())
+        elif e.kind == "action_result":
+            # The adapter applied, refused or declined an edit in a buffer. Recorded, never acted on:
+            # the buffer is the developer's, and the next save or buffer change says what it holds.
+            self.log(f"  action_result: {e.extra.get('action', 'edit')} {e.status} {e.path or ''} ({e.finding_id})")
         elif e.kind == "session_end":
             self._end_session(e)
         ev.append(self.events_log, e)
@@ -326,7 +334,10 @@ class Engine:
             return
         if t.kind == "removed_function":
             for s in sites:
-                s.verdict, s.reason = "breaks", "callee no longer exists"
+                if s.certain:
+                    s.verdict, s.reason = "breaks", "callee no longer exists"
+                else:
+                    s.verdict, s.reason = "unsure", f"callee no longer exists, if the receiver is a {sig.owner}"
         based = dict(t.based_on)
         for s in sites:
             based[s.path] = s.file_sha
@@ -381,6 +392,64 @@ class Engine:
         self.evid.add(Evidence(key, "test_run", f"tests mentioning {', '.join(names)}", f"{tr.status}: {tr.summary}",
                                based, [], details, seq=seq))
         self.log(f"  test_run: {tr.status}: {tr.summary}")
+
+    # ---------- checked fixes ----------
+    def _queue_fixes(self, path: str) -> None:
+        """Passive and per save. Only for a saved Python file, only when a fix route exists, never in
+        replay (which calls no model), and never for an unsaved buffer: a fix for code still being
+        typed would describe code the developer has already moved past."""
+        if self.config is None or self.replay or not path.endswith(".py"):
+            return
+        if not self.config.route("passive.fix").available:
+            return
+        rev = self.view.effective(path)
+        if rev is not None and not rev.dirty and not self.view.is_dirty(path):
+            self.sched.submit(path, rev.sha, self.seq, rev.origin, kind="fix")
+
+    def _fix_known(self, path: str, problem: str, sha: str) -> bool:
+        rec = self.evid.state.get(f"fix:{path}:{problem}")
+        return bool(rec) and rec["status"] == "fresh" and rec["based_on"].get(path) == sha
+
+    def _run_fixes(self, path: str, sha: str, seq: int) -> None:
+        """Propose, check and record a fix for each problem of this revision not yet answered.
+        A problem no model answered is not recorded, so the next save asks again."""
+        from .fix import check, propose
+        from .fix.project import Project
+        from .llm import providers
+        rev = self.view.effective(path)
+        if rev is None or rev.sha != sha or rev.dirty:
+            return                                   # the file moved on after the diagnostics came
+        body = self.snap.get(sha)
+        errors = [d for d in self.view.diagnostics.get(path, []) if d.get("severity") == "error"]
+        todo = [p for p in problems.group(errors) if not self._fix_known(path, p.key, sha)]
+        if body is None or not todo:
+            return
+        # The whole workspace as the editor has it: every other unsaved buffer in place, so the gate
+        # checks the fix against the code it imports as it is right now.
+        overlay = {p: (self.view.read(p) or b"").decode("utf-8", "replace")
+                   for p in self.view.dirty_paths() if p != path}
+        self.state = "working"
+        try:
+            found = propose.propose(self.config, path, body.decode("utf-8", "replace"), todo,
+                                    ask=self.ask or providers.ask, stale=lambda: self.sched.is_stale(path, sha),
+                                    project=Project(self.root, overlay))
+        except check.CheckerUnavailable as error:
+            self.log(f"  fixes: {error}; no fix can be checked")
+            found = []
+        finally:
+            self.state = "idle"
+        for p in found:
+            if p.transient:
+                self.log(f"  fix {path}:{p.line}: {p.outcome}; asked again after the next save")
+                continue
+            self.evid.add(Evidence(
+                f"fix:{path}:{p.problem}", "fix_proposal", f"{Path(path).name}:{p.line}", p.outcome, {path: sha},
+                [{"path": path, "line": p.line, "col": p.col, "verdict": p.outcome, "text": "", "reason": p.detail}],
+                {"problem": p.problem, "profile": p.profile, "edits": p.edits, "diff": p.diff,
+                 "warnings": p.warnings, "fix_id": p.fix_id, "covers": p.covers}, seq=seq))
+            self.log(f"  fix {path}:{p.line}: {p.outcome}" + (f" ({p.detail})" if p.detail else "")
+                     + (f", {len(p.warnings)} new warning(s)" if p.warnings else ""))
+        self.present()
 
     def _suggest(self, evd: Evidence) -> str | None:
         from .llm.client import suggest

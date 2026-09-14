@@ -33,9 +33,9 @@ CLIENT = "from calc import add\n\ndef total():\n    return add(1, 2)\n"
 TEST = "import sys\nfrom pathlib import Path\nsys.path.insert(0, str(Path(__file__).resolve().parents[1]))\nfrom calc import add\n\ndef test_add():\n    assert add(1, 2) == 3\n"
 
 
-def run(args, cwd=PROJECT):
+def run(args, cwd=PROJECT, timeout=30):
     p = subprocess.run([str(a) for a in args], cwd=cwd, env=ENV,
-                       capture_output=True, text=True, timeout=30)
+                       capture_output=True, text=True, timeout=timeout)
     if p.returncode:
         raise RuntimeError(f"{args}: {p.stdout}\n{p.stderr}")
     return p.stdout + p.stderr
@@ -304,6 +304,35 @@ def check_announce_on_start(root):
           f"clean one seeds the baseline, and buffers outside the workspace are skipped")
 
 
+# Typing somewhere else inside the debounce window -- a picker prompt, a scratch buffer, another
+# file -- must not take the pending edit's place. With one timer shared by every buffer it did,
+# and the edit reached the engine only on that file's next keystroke.
+OTHER_BUFFER = r"""local root = vim.env.COMPANION_TEST_ROOT
+local c = require("companion")
+c.setup({debounce={text=300, diagnostics=300, cursor=300}, transport={poll_ms=100}})
+vim.o.hidden = true
+vim.cmd("filetype on")
+vim.cmd("edit " .. vim.fn.fnameescape(root .. "/calc.py"))
+c.start(root)
+vim.api.nvim_buf_set_lines(0, 0, -1, false, {"def add(a, b, carry):", "    return a + b + carry"})
+vim.cmd("doautocmd TextChanged")
+vim.cmd("enew")
+vim.api.nvim_buf_set_lines(0, 0, -1, false, {"find files"})
+vim.api.nvim_exec_autocmds("TextChangedI", {buffer = 0})
+vim.wait(1200, function() return false end)
+c.stop(root)
+"""
+
+
+def check_other_buffer_keeps_pending_edit(root):
+    run_nvim("nvim-other-buffer", OTHER_BUFFER, root)
+    inbox = [json.loads(l) for l in (root / ".companion/inbox.jsonl").read_text().splitlines()]
+    check("Typing in another buffer does not cancel a pending edit",
+          any(e["kind"] == "buffer_changed" and "carry" in e.get("text", "") for e in inbox),
+          f"inbox {[e['kind'] for e in inbox]}; the edit to calc.py is sent although a scratch "
+          f"buffer changed inside its debounce window")
+
+
 # A language server message is routinely several lines. Neovim refuses to set a buffer line
 # containing a newline, so an unflattened field does not render badly -- it raises inside the
 # transport callback and the pane dies on every republish. This is that case, end to end.
@@ -490,7 +519,8 @@ def check_canonical_text():
 def main():
     print(f"Artifacts: {OUT}", flush=True)
     root = fixture("saved")
-    unit = run([sys.executable, "-m", "pytest", "-q", "tests"])
+    # The suite runs real basedpyright over shadow trees now and passed 30 seconds (pass 7).
+    unit = run([sys.executable, "-m", "pytest", "-q", "tests"], timeout=300)
     (OUT / "unit-tests.log").write_text(unit)
     check("Existing unit suite", "passed" in unit and "failed" not in unit,
           unit.strip().splitlines()[-1])
@@ -558,6 +588,7 @@ def main():
     check("Rapid submissions coalesce", eng.sched.stats["coalesced"] == 1 and eng.sched.stats["ran"] == before+1, json.dumps(eng.sched.stats))
 
     check_announce_on_start(fixture("nvim-announce"))
+    check_other_buffer_keeps_pending_edit(fixture("nvim-other-buffer"))
 
     live = fixture("nvim-live")
     ingest(live, "10-live-baseline", "calc.py", "client.py", "tests/test_calc.py")

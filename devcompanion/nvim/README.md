@@ -121,7 +121,7 @@ the `3` in `split(3)` — in red on top. Provenance is dimmed and only shown on 
 | `T` | a failing test run |
 | `C` | a call site that no longer fits a changed signature |
 | `E` | an error from the language server |
-| `?` | inferred: the parser could not settle it, so treat it as a question |
+| `?` | inferred: the parser could not settle it (argument unpacking, or a method called on something whose type it cannot know), so treat it as a question |
 | `unsaved` | the claim rests on a buffer, not on any file yet |
 | `stale` | the code moved since the claim was made; dimmed, or hidden with `ui.stale = "hide"` |
 
@@ -132,6 +132,7 @@ inferred last. A green test run is not a problem; it is `✓ 71 tests` in the he
 |---|---|
 | `↵` | inspect: the code, the block above, what changed, a likely fix when a model offered one. On the inspected problem, go to it |
 | `d` | raw: source, every diagnostic in the language server's own words, basis, buffer |
+| `f` | review the checked fix on this problem, or the first one: its diff in a float of its own |
 | `j` `k` | next and previous problem |
 | `h` `<BS>` | put the inspected problem away |
 | `p` | pin or unpin |
@@ -139,8 +140,8 @@ inferred last. A green test run is not a problem; it is `✓ 71 tests` in the he
 | `<Esc>` | leave: back to the code, the panel staying in view if pinned, closed otherwise |
 | `q` | close |
 
-The footer shows only the keys that do something where the cursor is. There is no `f fix`
-until the engine can propose one.
+The footer shows only the keys that do something where the cursor is; `f review` appears only
+on a problem with a checked fix.
 
 The selected problem has a quiet background and a `▸` (`▼` when opened), and the terminal cursor
 is hidden while the panel has focus. So that it is never unclear which window has the keyboard,
@@ -178,14 +179,55 @@ overlays, model, retrieval context, intake counters, and the adapter's own count
 centred float. This was the panel's header; it is useful to whoever is working on the
 companion and noise to whoever is coding.
 
-### Not built: deep work and proposed changes
+### Checked fixes
 
-Plan, grill and review belong in a larger temporary workspace of their own, not in the panel.
-A proposed fix belongs in a diff view (`accept`, `reject`, `next`), with the panel saying only
-that a fix exists. Neither exists yet: the first needs the Chat surface and the second the
-outbox writer and edit actions (`../docs/handoff.md`, `../docs/edit-actions.md`). Model-written
-sentences for diagnostics are also not built: today's sentences come from rules, and a message
-no rule knows keeps its first line.
+When the engine runs with a model, it proposes a fix for each error in a saved Python file, and
+the type checker has to vouch for it (`../docs/evaluations/checked-fixes.md`). Only a fix the
+checker accepted is offered, and only for the exact bytes it was checked on:
+
+```
+│ 2 problems                                   │
+│ ✓ I can fix 1 of these · f review            │
+│                                              │
+│ ▸ E  fields.py:3               ✓ fix checked │
+│      split() expects str | None, got int     │
+```
+
+**Keys in the review float.** `f` opens the fix's diff in a float of its own:
+
+| key | |
+|---|---|
+| `a` | apply the fix |
+| `r` | reject it for this revision |
+| `n` | move to the next fix |
+| `q` | close |
+
+**Applying edits the buffer, never the file.**
+- The buffer is left unsaved, and `u` undoes the fix.
+- Before touching the buffer, the adapter compares its canonical hash with the revision the fix
+  was checked on. When they differ, it refuses: `fields.py changed since the fix was checked ·
+  not applied`.
+
+**One fix, several problems.** A model asked about one problem often fixes more than that one. A fix
+that resolves several problems is offered once:
+- Each problem it resolves is marked `✓ fix checked`, and the opened problem says
+  `✓ fix checked · 2 problems`.
+- The float's title names every line it resolves (`fields.py:3, 7`), and lists their sentences
+  above the diff.
+- One `a` applies the fix, and one `r` rejects it, for all of them.
+
+**What the ✓ does and does not mean.**
+- A new warning the fix introduces is named next to the ✓ (`✓ fix checked · 1 new warning`) and
+  listed in the float.
+- ✓ means the checker found the code consistent, not that the fix is what you meant.
+- The checker sees the whole project as it is in your editor, unsaved buffers included. It runs no
+  tests, so a fix can type-check and still not be what the code meant.
+
+### Not built: deep work
+
+Plan, grill and review belong in a larger temporary workspace of their own, not in the panel;
+that needs the Chat surface. Model-written sentences for diagnostics are also not built: today's
+sentences come from rules, and a message no rule knows keeps its first line.
 
 ## Commands
 

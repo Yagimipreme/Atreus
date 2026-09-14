@@ -86,6 +86,44 @@ function M.is_stale(root, finding)
   return false
 end
 
+-- Checked fixes the developer rejected this session, by finding and the revision it was checked on:
+-- a fix checked again for other code is a new proposal and is offered again.
+M.declined = {}
+
+-- One fix can resolve several problems; it is offered, and declined, as one.
+local function fix_key(f)
+  local fix = f.fix or {}
+  if type(fix.id) == "string" and fix.id ~= "" then
+    return fix.id
+  end
+  local _, sha = next(fix.depends_on or {})
+  return (f.id or "") .. ":" .. tostring(sha)
+end
+M.fix_key = fix_key
+
+-- The finding's checked fix, when it can still be offered: checked, not rejected, and computed from
+-- exactly the bytes the buffer holds now. Anything else is nil -- a fix for other code is not shown.
+function M.fix(root, finding)
+  local fix = finding.fix
+  if type(fix) ~= "table" or fix.verdict ~= "checked" or type(fix.edits) ~= "table" or not next(fix.depends_on or {}) then
+    return nil
+  end
+  if M.declined[fix_key(finding)] or M.is_stale(root, finding) then
+    return nil
+  end
+  for rel, sha in pairs(fix.depends_on) do
+    local buf = vim.fn.bufnr(root .. "/" .. rel)
+    if buf ~= -1 and vim.api.nvim_buf_is_loaded(buf) and util.buffer_sha(buf) ~= sha then
+      return nil
+    end
+  end
+  return fix
+end
+
+function M.decline(finding)
+  M.declined[fix_key(finding)] = true
+end
+
 -- A test run's status. Findings published before `outcome` existed carry it only in prose.
 local function test_status(f)
   return (f.outcome or {}).status or (f.consequence or ""):match("^(%w+):")
@@ -144,6 +182,41 @@ function M.issues(root, only)
     end
     return (a.finding.id or "") < (b.finding.id or "")
   end)
+  return out
+end
+
+-- The problems that have a fix to offer, in the order the panel lists them.
+function M.fixable(root, only)
+  local out = {}
+  for _, entry in ipairs(M.issues(root, only)) do
+    if not entry.stale and M.fix(root, entry.finding) then
+      table.insert(out, entry.finding)
+    end
+  end
+  return out
+end
+
+-- The fixes to review, once each: a fix that resolves several problems is listed at its first.
+function M.fixes(root, only)
+  local out, seen = {}, {}
+  for _, f in ipairs(M.fixable(root, only)) do
+    local key = fix_key(f)
+    if not seen[key] then
+      seen[key] = true
+      table.insert(out, f)
+    end
+  end
+  return out
+end
+
+-- The problems one fix resolves, in the order the panel lists them.
+function M.resolved_by(root, finding)
+  local out, key = {}, fix_key(finding)
+  for _, f in ipairs(M.fixable(root)) do
+    if fix_key(f) == key then
+      table.insert(out, f)
+    end
+  end
   return out
 end
 

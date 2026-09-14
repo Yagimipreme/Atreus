@@ -116,10 +116,33 @@ def from_record(rec: dict, manifest: dict) -> list[dict]:
     return out
 
 
-def from_diagnostics(diagnostics: dict[str, list[dict]], manifest: dict) -> list[dict]:
+def checked_fixes(records: list[dict], manifest: dict) -> dict[tuple[str, str], dict]:
+    """Fresh fix proposals the gate checked, for the revision the editor is on, by (path, problem).
+
+    A fix is offered only against the exact bytes it was checked on: `depends_on` is what the
+    adapter compares before applying, and a revision that moved hides the fix rather than showing
+    one computed for other code."""
+    out: dict[tuple[str, str], dict] = {}
+    for rec in records:
+        if rec["kind"] != "fix_proposal" or rec["status"] != "fresh" or rec["claim"] != "checked":
+            continue
+        (path, sha), = rec["based_on"].items()
+        if manifest.get(path, {}).get("sha") != sha:
+            continue
+        d = rec["details"]
+        out[(path, d["problem"])] = {"id": d.get("fix_id") or rec["key"], "verdict": "checked",
+                                     "covers": d.get("covers") or [rec["locations"][0]["line"]],
+                                     "warnings": d["warnings"], "edits": d["edits"], "diff": d["diff"],
+                                     "profile": d["profile"], "depends_on": {path: sha}}
+    return out
+
+
+def from_diagnostics(diagnostics: dict[str, list[dict]], manifest: dict,
+                     fixes: dict[tuple[str, str], dict] | None = None) -> list[dict]:
     """The editor's own diagnostics, interpreted rather than echoed: grouped into problems and
     each said as one sentence (`problems.py`), with every raw message kept as evidence. Only
-    errors: warnings are already in the sign column and repeating them is noise."""
+    errors: warnings are already in the sign column and repeating them is noise. A problem with a
+    checked fix carries it as `fix`."""
     out: list[dict] = []
     for path in sorted(diagnostics):
         errors = [d for d in diagnostics[path] if d.get("severity") == "error"]
@@ -146,6 +169,8 @@ def from_diagnostics(diagnostics: dict[str, list[dict]], manifest: dict) -> list
                 "snapshot_id": manifest.get(path, {}).get("sha", ""),
                 "created_ts": time.time(),
             })
+            if (fix := (fixes or {}).get((path, problem.key))) is not None:
+                out[-1]["fix"] = fix
             if len(out) >= MAX_DIAGNOSTICS:
                 return out
     return out
@@ -155,7 +180,7 @@ def build(records: list[dict], manifest: dict, diagnostics: dict[str, list[dict]
     out: list[dict] = []
     for rec in records:
         out.extend(from_record(rec, manifest))
-    out.extend(from_diagnostics(diagnostics, manifest))
+    out.extend(from_diagnostics(diagnostics, manifest, checked_fixes(records, manifest)))
     return out
 
 
