@@ -39,6 +39,22 @@ def record(eng, key="signature_change:calc.py:add"):
     return eng.evid.state.get(key, {})
 
 
+def test_a_file_first_seen_as_an_unsaved_buffer_is_judged_against_the_file(tmp_path):
+    """Opened after :CompanionStart and edited without saving: the first event the engine ever
+    sees for the path is the buffer. Its baseline is the file on disk -- stored, not merely
+    hashed, or the comparison has nothing to read and the change passes as first sight. Found by
+    looking at the panel in a real editor, where exactly this drew an empty list."""
+    (tmp_path / "calc.py").write_text(SAVED)
+    (tmp_path / "client.py").write_text(CLIENT)
+    eng = Engine(tmp_path, run_tests=False, log=lambda _: None)
+    eng.handle_event(typed("calc.py", TYPED))
+    eng.sched.drain(wait=False)
+
+    assert record(eng).get("claim", "").startswith("1 call site(s): 1 break"), \
+        f"judged as {eng.evid.state.get('file:calc.py', {}).get('claim')!r}"
+    assert (tmp_path / "calc.py").read_text() == SAVED
+
+
 def test_unsaved_edit_produces_a_finding_without_touching_disk(project):
     eng, root = project
     eng.handle_event(typed("calc.py", TYPED, doc_version=9, language="python"))

@@ -104,8 +104,19 @@ class Engine:
             self.view.forget(e.path)
             ev.append(self.events_log, e)
             return
-        if origin != "editor" and not self.replay and self.snap.latest(e.path) is None:
-            self._baseline_from_git(e.path)          # lazy: only for files we first see now
+        if not self.replay and self.snap.latest(e.path) is None:
+            # Lazy: only for files we first see now. A save is judged against the committed
+            # version. An unsaved buffer is judged against the last save, which for a file first
+            # seen as a buffer is the file itself -- and it has to be stored, not just named:
+            # `view.disk_revision` hashes the file without keeping its bytes, so the comparison
+            # found nothing to read, and a file opened after :CompanionStart and edited without
+            # saving reported nothing at all.
+            if origin != "editor":
+                self._baseline_from_git(e.path)
+            elif (self.root / e.path).is_file():
+                saved = self.snap.put(e.path, (self.root / e.path).read_bytes(), self.seq, origin="disk")
+                ev.append(self.events_log, ev.Event(kind="baseline", path=e.path, source="disk",
+                                                    content_sha=saved.sha, seq=self.seq))
         put = self.snap.put(e.path, content, self.seq, origin=origin)
         e.content_sha, e.content_origin = put.sha, origin
         if origin == "editor":
