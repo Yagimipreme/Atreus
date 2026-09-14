@@ -75,8 +75,21 @@ That admits `qwen3-coder:30b` to the passive tier, which the laptop constraint w
 It is still gated, for reasons that have nothing to do with the laptop:
 
 - **Per-save, not per keystroke pause**, and only when breaking sites exist.
-- **`keep_alive` tuned.** Cold load measured 15.437 s; warm requests ~1.66 s median. Ollama's
-  default eviction means every save after a pause would otherwise pay the cold load.
+- **`keep_alive` tuned.** Ollama's default five-minute eviction means every save after a pause
+  would otherwise pay the cold load. Measured on this host through the engine's own request,
+  2026-09-14:
+
+  | | measured |
+  |---|---|
+  | cold load | 25.4 s |
+  | warm | 0.87 s (three consecutive, 0.87 / 0.88 / 0.89) |
+  | resident | 5.5 GB in VRAM of 19.2 GB — partial offload on the 8 GB card |
+
+  This supersedes the earlier 15.437 s / 1.66 s figures, which came from a different harness
+  and a larger prompt. Warm is comfortably inside a per-save budget. Cold is worse than
+  previously recorded and close enough to the 30 s request timeout that the first suggestion
+  after an eviction can be lost — which is why a claim derived while the model was unavailable
+  must still be able to acquire a sentence later.
 - **Visible degradation.** `model.status` already carries `loading` / `unavailable`; the pane
   must show it rather than appear to be thinking.
 

@@ -57,6 +57,12 @@ class EvidenceStore:
         if cur and cur["fingerprint"] == ev.fingerprint and cur["status"] == "fresh":
             cur["based_on"] = ev.based_on
             cur["ts"] = ev.ts
+            # The fingerprint deliberately excludes the model sentence, so re-deriving the same
+            # claim does not re-nag. But a claim first derived while the model was unavailable
+            # would then never get its sentence, however many times it is re-derived. Adopt one
+            # when we have one and the record has none; never overwrite a sentence with nothing.
+            if ev.suggestion and not cur.get("suggestion"):
+                cur["suggestion"] = ev.suggestion
             self._persist()
             return "unchanged"
         with self.log.open("a") as f:

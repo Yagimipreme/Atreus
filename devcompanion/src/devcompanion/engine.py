@@ -45,6 +45,7 @@ class Engine:
         self.seq, self.accepted_editor_seqs = self._scan_events_log()
         self.timings: list[dict] = []
         self.goal: str | None = None
+        self._prefix: str | None = None   # workspace path inside its git repo; see _git_prefix
         self.state = "idle"
         self.last_error: str | None = None
         # Set from outside by cmd_watch, an opaque dict Engine only carries and republishes.
@@ -206,11 +207,30 @@ class Engine:
             self.evid.mark_stale(path, rev.sha)
             self.sched.submit(path, rev.sha, self.seq, rev.origin)
 
+    def _git_prefix(self) -> str:
+        """Where the workspace sits inside its git repository, e.g. `devcompanion/`.
+
+        `git show HEAD:<path>` resolves from the repository root, not from the directory `-C`
+        points at. A workspace that is a subdirectory of its repo therefore needs this prefix,
+        or every baseline lookup silently misses and every file reads as first-seen — which
+        means no comparison, no signature change, and a companion that says nothing at all.
+        Empty when the workspace is the repo root, or when there is no repo.
+        """
+        if self._prefix is None:
+            try:
+                r = subprocess.run(["git", "-C", str(self.root), "rev-parse", "--show-prefix"],
+                                   capture_output=True, text=True, timeout=10)
+                self._prefix = r.stdout.strip() if r.returncode == 0 else ""
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                self._prefix = ""
+        return self._prefix
+
     def _baseline_from_git(self, rel: str) -> None:
         """Follow mode baseline = the committed version. Recorded as a `baseline` event so a
         replay reproduces it. Freeze mode will simply point this at a chosen ref instead of HEAD."""
         try:
-            r = subprocess.run(["git", "-C", str(self.root), "show", f"HEAD:{rel}"], capture_output=True, timeout=10)
+            r = subprocess.run(["git", "-C", str(self.root), "show", f"HEAD:{self._git_prefix()}{rel}"],
+                               capture_output=True, timeout=10)
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return
         if r.returncode != 0:
@@ -310,7 +330,11 @@ class Engine:
             details["unsaved_inputs"] = ", ".join(sorted(unsaved))
         evd = Evidence(key, t.kind, t.detail or sig.render(), claim, based,
                        [asdict(s) for s in sites], details, seq=t.seq)
-        if self.llm and sites and n_break:
+        # Per save, not per keystroke pause. A warm request is ~1.66 s against a 400 ms debounce,
+        # so calls made while typing would queue behind each other and land describing drafts the
+        # developer has already moved past. Deterministic findings stay immediate either way;
+        # the model only ever appends a sentence to a claim that is already on the board.
+        if self.llm and sites and n_break and origin != "editor":
             evd.suggestion = self._suggest(evd)
         r = self.evid.add(evd)
         self.log(f"  {t.kind} [{r}]: {evd.title}: {claim}")

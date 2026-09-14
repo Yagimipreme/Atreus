@@ -18,7 +18,8 @@ from .observe.intake import Intake
 def _llm_from_args(a) -> dict | None:
     if not a.model:
         return None
-    return {"model": a.model, "backend": a.backend, "base_url": a.base_url, "cpu_only": a.cpu_only}
+    return {"model": a.model, "backend": a.backend, "base_url": a.base_url,
+            "cpu_only": a.cpu_only, "keep_alive": a.keep_alive}
 
 
 def cmd_ingest(a):
@@ -125,6 +126,8 @@ def main(argv=None):
     ap.add_argument("--backend", default="ollama", choices=["ollama", "openai"])
     ap.add_argument("--base-url", default=None)
     ap.add_argument("--cpu-only", action="store_true")
+    ap.add_argument("--keep-alive", default="30m",
+                    help="how long the backend keeps the model resident (ollama); 0 to unload immediately")
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("ingest"); s.add_argument("paths", nargs="+"); s.set_defaults(fn=cmd_ingest)
     s = sub.add_parser("replay"); s.add_argument("replay_dir"); s.set_defaults(fn=cmd_replay)

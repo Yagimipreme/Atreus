@@ -147,15 +147,26 @@ Beyond the previously passing saved-file workflow, the harness now establishes:
 - Quitting the editor drops its overlays.
 - Buffers already open when `:CompanionStart` runs are announced immediately, including an
   already-modified one, rather than waiting for the next keystroke.
+- A workspace nested inside its git repository still gets committed-version baselines. Found
+  by running the engine on this project after it was committed into `~/repos`: `git show
+  HEAD:<path>` resolves from the repo root, so every file read as first-seen and the companion
+  said nothing at all. Every harness fixture is its own repo rooted at the workspace, which is
+  why nothing caught it.
 
 ## Model state
 
 Unchanged from the previous pass; no hosted API call has been made.
 
-`qwen3-coder:30b` loads and runs at 4K context through Ollama on this machine (Ryzen 7 5800X3D,
-46 GiB RAM, RTX 2080 SUPER 8 GiB; ~19 GB package, partial offload, ~70% CPU / 30% GPU). Initial
-load 15.437 s; warm breaking-only requests ~1.66 s median, 1.74 s max. `qwen2.5-coder:3b` is the
-fast fallback at ~0.15–0.21 s but was weaker on mixed caller prompts.
+`qwen3-coder:30b` is wired and running. Measured through the engine's own request path on
+2026-09-14: **cold load 25.4 s, warm 0.87 s** (5.5 GB resident in VRAM of 19.2 GB, partial
+offload on the 8 GB card). This supersedes the earlier 15.437 s / 1.66 s figures from the
+standalone evaluation harness. `qwen2.5-coder:3b` remains the fast fallback at ~0.15–0.21 s but
+was weaker on mixed caller prompts; `qwen3:4b`, the size the vision actually named for the
+passive tier, is installed and has never been measured on this workload.
+
+The model is called **per save only**, never per keystroke pause, and only when breaking call
+sites exist. `keep_alive` defaults to 30m (`--keep-alive`), without which most saves after a
+pause pay the cold load.
 
 Use `qwen3-coder:30b` as the primary local candidate for optional background suggestions. Keep
 deterministic findings immediate and append model text when it arrives. Continue to pass only

@@ -29,7 +29,8 @@ SYSTEM = ("You are a quiet coding companion. Given evidence about a code change,
 
 
 def suggest(evidence_text: str, model: str, backend: str = "ollama", base_url: str | None = None,
-            timeout_s: float = 30, num_ctx: int = 4096, cpu_only: bool = False) -> Reply:
+            timeout_s: float = 30, num_ctx: int = 4096, cpu_only: bool = False,
+            keep_alive: str = "30m") -> Reply:
     t0 = time.time()
     try:
         if backend == "ollama":
@@ -37,7 +38,13 @@ def suggest(evidence_text: str, model: str, backend: str = "ollama", base_url: s
             opts = {"num_ctx": num_ctx, "temperature": 0, "num_predict": 60}
             if cpu_only:
                 opts["num_gpu"] = 0
+            # Ollama evicts after five minutes by default. Measured on this host, a cold load of
+            # qwen3-coder:30b is 15.437 s against ~1.66 s warm, so with the default the developer
+            # pays the cold load on most saves after a pause -- which is the difference between a
+            # companion and an interruption. llama-server keeps the model resident already, so
+            # this is an ollama-only concern.
             body = {"model": model, "stream": False, "think": False, "options": opts,
+                    "keep_alive": keep_alive,
                     "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": evidence_text}]}
             req = urllib.request.Request(url, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=timeout_s) as r:
