@@ -133,16 +133,20 @@ inferred last. A green test run is not a problem; it is `✓ 71 tests` in the he
 | `↵` | inspect: the code, the block above, what changed, a likely fix when a model offered one. On the inspected problem, go to it |
 | `d` | raw: source, every diagnostic in the language server's own words, basis, buffer |
 | `j` `k` | next and previous problem |
+| `h` `<BS>` | put the inspected problem away |
 | `p` | pin or unpin |
 | `r` | redraw |
-| `<Esc>` | put the inspected problem away, or close |
+| `<Esc>` | leave: back to the code, the panel staying in view if pinned, closed otherwise |
 | `q` | close |
 
 The footer shows only the keys that do something where the cursor is. There is no `f fix`
 until the engine can propose one.
 
 The selected problem has a quiet background and a `▸` (`▼` when opened), and the terminal cursor
-is hidden while the panel has focus, so the selection is the only thing marking where you are.
+is hidden while the panel has focus. So that it is never unclear which window has the keyboard,
+the border is bright while the panel has focus and dim while it is only in view, and the
+unfocused footer names the way back in — your own mapping for `:CompanionPanel`, such as
+`␣aa focus`, or `:CompanionPanel` when there is none.
 
 Having been asked for, the panel takes focus, because its keys act inside it. It closes on `q`,
 a jump, or leaving its window, and hands the cursor back to the window it was opened from. It

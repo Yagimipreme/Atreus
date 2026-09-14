@@ -23,6 +23,8 @@ local LINKS = {
   CompanionGot = "DiagnosticError",   -- what the code has instead
   CompanionSelected = "CursorLine",   -- the selected problem, in place of a cursor
   CompanionSource = "Visual",         -- the selected problem's range, in the code
+  CompanionBorderActive = "DiagnosticInfo", -- the panel has the keyboard
+  CompanionBorder = "Comment",              -- the panel is only in view
 }
 
 function M.highlights()

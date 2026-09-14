@@ -120,6 +120,12 @@ The user's direction after living with it: polish, not redesign. Done:
   selected, never taken away. While the panel has focus, the selected problem's range is marked
   in the code. Nothing moves the cursor except `↵`. The first version of following did not
   remember what it replaced, and the harness caught it.
+- **Which window has the keyboard is visible.** In live use the user "left" the panel with
+  `<Esc>`, which then only folded the inspected problem, and could not find the way back in —
+  the cursor was still inside, hidden, with a selection background that the colourscheme made
+  nearly invisible. Now the border is bright while the panel has focus and dim while it is only
+  in view, `<Esc>` always leaves (a pinned panel stays in view, an unpinned one closes), `h`
+  folds, and the unfocused footer names the user's own mapping back in (`␣aa focus`).
 
 ## User direction
 
@@ -240,7 +246,7 @@ now: it has no LSP question to ask. The adapter already tails it.
 The harness is [scripts/check-workflow.py](../scripts/check-workflow.py). It uses real CLI
 execution, the real engine, real pytest, and real headless Neovim.
 
-Latest documented result: **53 checks passed; 0 failed; 0 gaps.** Plus 107 unit tests.
+Latest documented result: **54 checks passed; 0 failed; 0 gaps.** Plus 107 unit tests.
 
 ```bash
 uv run pytest -q

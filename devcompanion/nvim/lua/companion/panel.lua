@@ -476,15 +476,29 @@ local function item_at(lnum)
   return found
 end
 
+-- How to get back into the panel: the developer's own mapping for :CompanionPanel when there is
+-- one, so the hint names the keys they actually press.
+local function enter_key()
+  for _, m in ipairs(vim.api.nvim_get_keymap("n")) do
+    local rhs = (m.rhs or ""):lower()
+    if rhs == "<cmd>companionpanel<cr>" or rhs == ":companionpanel<cr>" then
+      return (vim.fn.keytrans(m.lhs):gsub("<Space>", "␣"))
+    end
+  end
+  return ":CompanionPanel"
+end
+
 -- The keys that do something where the cursor is. Only keys that exist: no `f fix` until the
--- engine can propose one.
+-- engine can propose one. With the cursor elsewhere, the only useful key is the way back in.
 local function footer()
   local cur = M.is_open() and item_at(vim.api.nvim_win_get_cursor(state.win)[1]) or nil
   local keys
-  if #items == 0 then
+  if M.is_open() and not focused() then
+    keys = { { enter_key(), "focus" } }
+  elseif #items == 0 then
     keys = { { "q", "close" } }
   elseif cur and cur.finding.id == open.id then
-    keys = { { "↵", "go to" }, { "d", open.raw and "hide raw" or "raw" }, { "q", "close" } }
+    keys = { { "↵", "go to" }, { "d", open.raw and "hide raw" or "raw" }, { "h", "back" }, { "q", "close" } }
   else
     keys = { { "↵", "inspect" }, { "p", M.is_pinned() and "unpin" or "pin" }, { "q", "close" } }
   end
@@ -520,6 +534,14 @@ local function place_window(height)
 end
 
 -- ---------------------------------------------------------------- cursor and code
+
+-- Which window has the keyboard has to be visible at a glance, because the cursor is hidden
+-- inside the panel: a bright border while it has focus, a quiet one while it is only in view.
+local function paint_focus()
+  if M.is_open() then
+    vim.wo[state.win].winhighlight = "FloatBorder:" .. (focused() and "CompanionBorderActive" or "CompanionBorder")
+  end
+end
 
 -- Inside the panel the terminal cursor is hidden: the selected problem's background and marker
 -- say where you are, and a block cursor on top of them reads as a text cursor in a text buffer.
@@ -702,10 +724,23 @@ function M.toggle_raw()
   show_item(it.finding.id)
 end
 
--- <Esc>: put the inspected problem away; with none open, close.
-function M.escape()
-  if not open.id then
+-- <Esc>: out of the panel, in one key whatever is open. A pinned panel stays in view and the
+-- cursor goes back to the code; an unpinned one closes.
+function M.leave()
+  if not M.is_pinned() then
     return M.close()
+  end
+  if state.origin and vim.api.nvim_win_is_valid(state.origin) and state.origin ~= state.win then
+    vim.api.nvim_set_current_win(state.origin)
+  else
+    vim.cmd("wincmd p")
+  end
+end
+
+-- h: put the inspected problem away, staying in the panel.
+function M.collapse()
+  if not open.id then
+    return
   end
   local id = open.id
   open.id, open.raw = nil, false
@@ -790,17 +825,20 @@ local function ensure_buffer()
   map("k", function() M.step(-1) end, "previous problem")
   map("p", function() M.set_pinned() end, "pin or unpin")
   map("r", function() M.refresh() end, "redraw")
+  map("h", M.collapse, "put the inspected problem away")
+  map("<BS>", M.collapse, "put the inspected problem away")
   map("q", M.close, "close")
-  map("<Esc>", M.escape, "put the problem away, or close")
+  map("<Esc>", M.leave, "leave the panel")
   vim.api.nvim_create_autocmd("WinEnter", {
     buffer = buf,
     callback = function()
       hide_cursor()
+      paint_focus()
       mark_selection()
     end,
   })
   -- Temporary unless pinned: leaving it closes it. Scheduled, because a window cannot be closed
-  -- from inside the event that is leaving it.
+  -- from inside the event that is leaving it; a pinned panel is repainted as unfocused instead.
   vim.api.nvim_create_autocmd("WinLeave", {
     buffer = buf,
     callback = function()
@@ -809,6 +847,9 @@ local function ensure_buffer()
       vim.schedule(function()
         if not M.is_pinned() and not focused() then
           M.close()
+        elseif not focused() then
+          paint_focus()
+          mark_selection()
         end
       end)
     end,
@@ -833,6 +874,7 @@ function M.open(root, only)
   ensure_buffer()
   place_window(render())
   hide_cursor()
+  paint_focus()
   if items[1] then
     vim.api.nvim_win_set_cursor(state.win, { items[1].first, 0 })
   end

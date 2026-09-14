@@ -220,6 +220,21 @@ vim.api.nvim_set_current_win(code)
 vim.wait(100, function() return false end)
 pinned.source_cleared = #vim.api.nvim_buf_get_extmarks(client, source_ns, 0, -1, {}) == 0
 pinned.cursor_restored = vim.o.guicursor == guicursor
+-- Leaving and coming back must both be visible, because the cursor is hidden inside: the border
+-- says which window has the keyboard, <Esc> leaves a pinned panel in view, and the unfocused
+-- footer names the way back in.
+local function footer_text(win)
+  local f = vim.api.nvim_win_get_config(win).footer or ""
+  return type(f) == "string" and f or table.concat(vim.tbl_map(function(ch) return ch[1] end, f), "")
+end
+vim.cmd("CompanionPanel")
+local pwin = vim.api.nvim_get_current_win()
+pinned.entered_visibly = pwin ~= code and vim.wo[pwin].winhighlight:find("CompanionBorderActive", 1, true) ~= nil
+vim.cmd([[execute "normal \<Esc>"]])
+vim.wait(100, function() return false end)
+pinned.esc_left_it_open = vim.api.nvim_get_current_win() == code and panel.is_open()
+pinned.says_how_back = footer_text(pwin):find("CompanionPanel", 1, true) ~= nil
+  and vim.wo[pwin].winhighlight:find("CompanionBorderActive", 1, true) == nil
 vim.cmd("CompanionPanelPin")
 pinned.unstick_closed = not panel.is_open()
 
@@ -412,6 +427,10 @@ def check_panel(root):
           pinned.get("cursor_hidden") and pinned.get("cursor_restored"),
           "guicursor carries the hidden-cursor highlight while the panel has focus, and is "
           "restored exactly when it loses it")
+    back = ("entered_visibly", "esc_left_it_open", "says_how_back")
+    check("Leaving and re-entering a pinned panel is visible", all(pinned.get(k) for k in back),
+          "entering brightens the border; <Esc> returns to the code with the panel still in view; "
+          "the unfocused footer names the key back in — " + json.dumps({k: pinned.get(k) for k in back}))
     check("Statusline carries the count",
           state["statusline"].startswith("◉") and any(ch.isdigit() for ch in state["statusline"]),
           repr(state["statusline"]))
