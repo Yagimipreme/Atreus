@@ -1,6 +1,6 @@
 # devcompanion handoff
 
-Status: 2026-09-14, second pass. This is the current pickup document for the passive
+Status: 2026-09-14, third pass. This is the current pickup document for the passive
 development companion. It covers what exists, what was verified, what is only designed, and
 the next implementation order.
 
@@ -101,6 +101,26 @@ as `cli`; and `vim.json.decode` turns JSON `null` into `vim.NIL`, a userdata sen
 threw on the first `engine.model.name or "none"`. All adapter JSON now goes through
 `util.decode_json`.
 
+## What changed in the third pass
+
+The intake watermark, the local model tier, and the first live session. Three commits:
+`devcompanion: passive development companion` (initial), `model tier: keep resident, call per
+save…`, `findings: a published field is a line…`, `engine: a heartbeat that stops while idle…`.
+
+**The intake watermark is done** ([intake-watermark.md](intake-watermark.md)). `companion watch`
+resumes where it left off instead of replaying the editing history on every restart. Two
+mechanisms together: a byte offset for cost, and a per-session accepted-sequence mark for
+correctness when the offset has to be reset. Session ids are now unique per Neovim instance —
+`math.random` is unseeded in LuaJIT, so every instance had been returning the same id.
+
+**The local model is wired and in use.** `qwen3-coder:30b` through Ollama, called per save and
+only when breaking call sites exist, with `keep_alive` so the model stays resident. A claim is
+asked about once: re-deriving an unchanged claim reuses the stored sentence.
+
+**Six defects came out of running it**, none from the test suite. They are listed under
+*Verified behavior* below because each is now covered. The pattern is recorded globally in
+`global-lessons` — a green suite is a regression net, not a discovery instrument.
+
 ## Current implementation
 
 Two halves communicate through files under `<workspace>/.companion/`.
@@ -125,7 +145,7 @@ now: it has no LSP question to ask. The adapter already tails it.
 The harness is [scripts/check-workflow.py](../scripts/check-workflow.py). It uses real CLI
 execution, the real engine, real pytest, and real headless Neovim.
 
-Latest documented result: **36 checks passed; 0 failed; 0 gaps.** Plus 60 unit tests.
+Latest documented result: **44 checks passed; 0 failed; 0 gaps.** Plus 89 unit tests.
 
 ```bash
 uv run pytest -q
@@ -147,6 +167,16 @@ Beyond the previously passing saved-file workflow, the harness now establishes:
 - Quitting the editor drops its overlays.
 - Buffers already open when `:CompanionStart` runs are announced immediately, including an
   already-modified one, rather than waiting for the next keystroke.
+- `companion watch` resumes at its recorded position and re-reads nothing, on both a clean
+  restart and after the inbox is rotated or truncated.
+- The local model is asked once per claim, never while typing, and its sentence reaches the
+  pane. Tested against a real HTTP server on a loopback port, not a mock, because what is worth
+  asserting is the request body and the call count.
+- A published finding field never contains a newline. Neovim refuses to set a buffer line
+  containing one, so a multi-line language-server message did not render badly — it raised and
+  killed the pane on every republish.
+- Liveness and findings are published on different cadences: `engine.json` every five seconds
+  while idle, `findings.jsonl` only on change.
 - A workspace nested inside its git repository still gets committed-version baselines. Found
   by running the engine on this project after it was committed into `~/repos`: `git show
   HEAD:<path>` resolves from the repo root, so every file read as first-seen and the companion
@@ -264,33 +294,47 @@ once the model's paragraphs have been seen in real use.
 
 ## Next implementation order
 
-1. **Model profiles and the provider abstraction.** Wire `local-qwen3-coder` first, then the
-   two CLI providers with their tripwire tests. Keep model output optional and delayed; the
-   `model` block in `engine.json` and the pane's model line already exist, so this is additive.
-   See [providers.md](providers.md) and [configuration.md](configuration.md).
-2. **Configuration loading** — three scopes, the routing table, `companion config --effective`.
+1. **The live coding test is running and unfinished.** The engine is wired, the model answers,
+   the pane renders. What is missing is a judgement: are the sentences worth having? That
+   answer gates whether proposed edits ([edit-actions.md](edit-actions.md)) get built at all,
+   and it is the only item here that cannot be worked around.
+
+   Two observations already on the table from the first minutes of use:
+
+   - The panel echoes editor diagnostics the developer can already see in their sign column and
+     virtual text — four of five entries in the first real session. Warnings were excluded for
+     exactly that reason and errors were republished anyway, which does not hold up. Candidate
+     rule: show what the editor cannot already say, or restrict the echo to files that are not
+     open.
+   - A diagnostic finding repeats its title verbatim in its evidence line. Small, and a defect.
+
+2. **Provider abstraction.** The Ollama path is built; the two CLI providers (Claude Code,
+   Codex) are not, and neither is the tripwire test that must gate each one. opencode is
+   deferred. See [providers.md](providers.md).
+
+3. **Configuration loading** — three scopes, the routing table, `companion config --effective`.
    Nothing remote is enabled until `--effective` can print the bytes that would be sent.
    Includes skill discovery and capability negotiation
-   ([skills-and-modes.md](skills-and-modes.md)): adopt the format now and author the passive
-   tier's own prompts as skills, which exercises it against a real consumer before any chat
-   surface exists.
-3. **The live coding test.** Steps 1 and 2 are what make it possible: the 30B on per-save
-   breaking sites, its paragraph in the pane with provenance. This is the gate on whether
-   proposed edits get built at all.
-4. **Edit actions**, in the order given in [edit-actions.md](edit-actions.md) — outbox writer,
+   ([skills-and-modes.md](skills-and-modes.md)); author the passive tier's own prompts as
+   skills to exercise it before any chat surface exists.
+
+4. **Edit actions**, in the order in [edit-actions.md](edit-actions.md) — outbox writer,
    adapter buffer-apply and freshness refusal first, because refusal must exist before the
-   first edit ships.
-5. **QMD project warmup and provenance-filtered retrieval**, reported through the existing
-   `context` field.
+   first edit ships. Gated on item 1.
+
+5. **QMD project warmup and provenance-filtered retrieval**, through the existing `context`
+   field.
+
 6. **Snapshot store read costs.** `history()` re-parses a whole JSONL file per call and
    `latest()`/`previous()` call it repeatedly; `known_paths()` reads every history file. This
-   is the thing that will hurt on a many-worktree repository, and it is algorithmic — fix it
-   before anyone reaches for a faster language.
-7. **Dismiss.** The engine logs `dismiss` events and does nothing with them. Honouring one
-   needs a suppression record keyed to the evidence, so it expires when the evidence changes.
-8. **The Chat surface**, and only then modes. Modes are a routing key and a prompt prefix —
-   the cheap half. The conversation they need (session state, turn history, context carried
-   across turns) does not exist; the adapter is collect, transport, panel.
+   is what will hurt on a many-worktree repository, and it is algorithmic — fix it before
+   anyone reaches for a faster language.
+
+7. **Dismiss.** Logged and ignored. Honouring one needs a suppression record keyed to the
+   evidence, so it expires when the evidence changes.
+
+8. **The Chat surface**, and only then modes. Modes are a routing key and a prompt prefix — the
+   cheap half. The conversation they need does not exist.
 
 ## Known risks and edges
 
@@ -316,6 +360,43 @@ once the model's paragraphs have been seen in real use.
   enabling broad retrieval by default.
 - 16 hex characters of sha256 is an equality check on developer-authored content, not a defence
   against a chosen-prefix attack. A collision surfaces as one stale finding.
+- Rotation or truncation of the inbox **while the engine is running** is not detected and
+  silently drops events. Nothing in-tree triggers it, and the trap for whoever fixes it is
+  recorded in [intake-watermark.md](intake-watermark.md)'s Known limits.
+- The engine has only ever been run against Python. Detection and caller judgement are
+  Python-specific despite S6 calling for language-agnosticism through language servers.
+
+## What was promoted to the global knowledge base
+
+Durable, cross-project conclusions from this work live in `~/knowledge-global`, not here, per
+its rule that repo-specific layout stays in the repo. Searchable with a bare `qmd query`:
+
+| Page | Domain |
+|---|---|
+| `models/qwen3-coder-30b` — sub-second warm, 25 s cold, usable only while resident | `global-ai-models` |
+| `gotchas/neovim-plugin-api-traps` — vim.NIL, unseeded math.random, buffer lines reject newlines, VimLeavePre | `global-lessons` |
+| `failures/tests-cover-only-the-staged-path` — staging the interesting case leaves the ordinary one untested | `global-lessons` |
+| `wisdom/run-it-before-believing-the-suite` — six defects, all from running, none from the suite | `global-lessons` |
+| `patterns/cross-language-content-hash` — fixtures verified against what the storage side writes | `global-engineering` |
+| `patterns/implement-review-run` — three verification layers catching disjoint defect classes | `global-agent-patterns` |
+
+## The live session
+
+A watcher is running against this repository with the model attached:
+
+```bash
+uv run companion --root . --model qwen3-coder:30b --keep-alive 30m watch
+```
+
+The Neovim side is registered as a lazy.nvim plugin, so `:CompanionStart` and
+`:CompanionPanel` are available without touching `runtimepath` by hand.
+
+**The operator's autosave is disabled for the duration** (both `InsertLeave`/`TextChanged` and
+`CursorHold` write autocmds, commented in their `init.lua` with a restore note and a backup).
+This matters more than it sounds: writing on `InsertLeave` means the buffer is saved the moment
+insert mode ends, so the unsaved-buffer window — the thing this project exists to observe —
+only existed while actively typing. With autosave on, a live test measures the saved-file path
+that already worked.
 
 ## Useful commands
 
