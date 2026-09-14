@@ -66,6 +66,8 @@ def cmd_watch(a):
     # mark intake.json already has -- see Intake.seed and Engine._scan_events_log.
     intake.seed(eng.accepted_editor_seqs)
 
+    HEARTBEAT_S = 5.0          # how stale the pane's liveness reading may get
+    last_status = 0.0
     last_published_intake = _intake_block(intake)
     eng.intake_stats = last_published_intake
     # Report what we resumed at even before anything new arrives, so the pane can tell
@@ -97,6 +99,12 @@ def cmd_watch(a):
                 if current != last_published_intake:
                     eng.intake_stats = last_published_intake = current
                     eng.publish()
+                elif time.time() - last_status >= HEARTBEAT_S:
+                    # Liveness only. Findings have not changed, so republishing them would wake
+                    # the editor into a full re-read; but a heartbeat that stops while idle is
+                    # not a heartbeat, and the pane would show a healthy engine as dead.
+                    last_status = time.time()
+                    eng.publish_status()
                 continue
             eng.handle_event(e)
             if offset is not None:

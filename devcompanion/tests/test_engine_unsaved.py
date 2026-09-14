@@ -5,6 +5,7 @@ here runs pytest or a model; scripts/check-workflow.py covers the same ground th
 actual Neovim and an actual CLI.
 """
 import json
+import time
 
 import pytest
 
@@ -284,3 +285,25 @@ def test_a_clean_restart_still_picks_up_further_typing(tmp_path):
     rec = record(eng2)
     assert rec["based_on"]["calc.py"] == sha(further.encode())
     assert list(intake2.drain()) == []
+
+
+def test_liveness_moves_without_rewriting_the_findings(project):
+    """A heartbeat that stops while idle is not a heartbeat: the pane would show a healthy
+    engine as dead. But republishing the finding set on that cadence wakes the editor into a
+    full re-read for nothing, so the two writes are separate."""
+    eng, root = project
+    eng.handle_event(typed("calc.py", TYPED))
+    eng.sched.drain(wait=False)
+
+    findings = root / ".companion/findings.jsonl"
+    before_findings = findings.read_bytes()
+    before_beat = json.loads((root / ".companion/engine.json").read_text())["heartbeat_ts"]
+
+    time.sleep(0.01)
+    eng.publish_status()
+
+    after = json.loads((root / ".companion/engine.json").read_text())
+    assert after["heartbeat_ts"] > before_beat, "liveness did not move"
+    assert findings.read_bytes() == before_findings, "findings were rewritten for a heartbeat"
+    assert after["findings"] == len(before_findings.splitlines()), "status lost the finding count"
+    assert after["revisions"]["calc.py"]["origin"] == "editor", "status lost the manifest"

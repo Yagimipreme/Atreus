@@ -46,6 +46,7 @@ class Engine:
         self.timings: list[dict] = []
         self.goal: str | None = None
         self._prefix: str | None = None   # workspace path inside its git repo; see _git_prefix
+        self._findings_count, self._manifest = 0, {}   # last published set, for status-only writes
         self.state = "idle"
         self.last_error: str | None = None
         # Set from outside by cmd_watch, an opaque dict Engine only carries and republishes.
@@ -396,6 +397,17 @@ class Engine:
         manifest = self.view.manifest(paths)
         items = findings_out.build(records, manifest, self.view.diagnostics)
         findings_out.write(self.dir, items)
+        self._findings_count, self._manifest = len(items), manifest
+        self._write_status()
+
+    def publish_status(self) -> None:
+        """Liveness only. `heartbeat_ts` answers "is anything still running", so it has to keep
+        moving while nothing happens — which is precisely when the answer matters. Rewriting the
+        whole finding set on that cadence would wake the editor into a full re-read for nothing,
+        so the two are deliberately separate: this file is small and cheap, that one is not."""
+        self._write_status()
+
+    def _write_status(self) -> None:
         status_out.write(self.dir, status_out.snapshot(
             workspace=self.root,
             state=self.state,
@@ -403,8 +415,8 @@ class Engine:
             pending_tasks=self.sched.pending,
             session=self.view.session,
             dirty=self.view.dirty_paths(),
-            findings=len(items),
-            revisions=manifest,
+            findings=self._findings_count,
+            revisions=self._manifest,
             model=self._model_status(),
             last_error=self.last_error,
             intake=self.intake_stats,
