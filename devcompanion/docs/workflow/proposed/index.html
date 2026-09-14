@@ -1,0 +1,208 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Proposed editor feedback loop</title>
+<style>body{font:17px/1.65 system-ui;background:#f3f6f8;color:#17334d;margin:0}main{max-width:1150px;margin:auto;padding:32px}h1{line-height:1.2;font-size:38px}section{background:white;padding:24px;margin:24px 0;border:1px solid #d6e1e8;border-radius:12px}svg{width:100%;height:auto;min-width:680px}.diagram{overflow:auto}a{color:#12616d}.tag{color:#ad6800;font-weight:bold}li{margin:9px 0}</style><main>
+<p class="tag">PROPOSED DESIGN · 14 September 2026 · Steps 1&ndash;4 implemented; step 5 (restart recovery) is not</p><p style="padding:14px;background:#e2f2f2;border-left:4px solid #207b85;border-radius:5px"><strong>This is the target, kept for comparison.</strong> The unsaved-edit loop it describes is built and verified &mdash; see <a href="../index.html">the current workflow</a> and <a href="../test-results.md">the check run</a>. Two differences in the delivered version: one pane rather than separate Callers and Errors windows, and restart recovery still to do.</p><h1>Unsaved edits → trustworthy findings in Neovim</h1>
+<p>Keep disk and editor content separate. Analyze effective editor contents, invalidate old findings immediately, and publish only results whose inputs still match.</p>
+<p><a href="../../editor-feedback-design.md">Full design and implementation slices</a> · <a href="../index.html">Current workflow</a> · <a href="feedback.bpmn">BPMN 2.0 XML</a></p>
+<section><h2>First milestone</h2><ol><li>Change a Python signature without saving.</li><li>Open Callers: see evidenced mismatches against the current buffers.</li><li>Fix callers without saving: outdated findings disappear after re-analysis.</li><li>Save: run eligible saved-code tests under project policy.</li><li>Restart either side: synchronize buffers and recover work without reviving old findings as fresh.</li></ol>
+<p>Proposed scope: one active editor view per workspace; Errors and Callers first; models optional. Testing unsaved code in an isolated copy is a separate scope decision.</p></section>
+<section><h2>C4 · Container architecture</h2><div class="diagram"><svg width="1434pt" height="972pt"
+ viewBox="0.00 0.00 1434.00 972.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(21.6 950.88)">
+<title>proposed</title>
+<polygon fill="white" stroke="none" points="-21.6,21.6 -21.6,-950.88 1412.62,-950.88 1412.62,21.6 -21.6,21.6"/>
+<text xml:space="preserve" text-anchor="middle" x="695.51" y="-904.38" font-family="Arial" font-size="22.00">PROPOSED · C4 level 2 · Editor feedback loop</text>
+<g id="clust1" class="cluster">
+<title>cluster_system</title>
+<path fill="white" stroke="#207b85" d="M20,-142.46C20,-142.46 722,-142.46 722,-142.46 728,-142.46 734,-148.46 734,-154.46 734,-154.46 734,-773.99 734,-773.99 734,-779.99 728,-785.99 722,-785.99 722,-785.99 20,-785.99 20,-785.99 14,-785.99 8,-779.99 8,-773.99 8,-773.99 8,-154.46 8,-154.46 8,-148.46 14,-142.46 20,-142.46"/>
+<text xml:space="preserve" text-anchor="middle" x="371" y="-761.09" font-family="Arial" font-size="22.00">devcompanion · software system</text>
+</g>
+<!-- dev -->
+<g id="node1" class="node">
+<title>dev</title>
+<path fill="#163e61" stroke="#207b85" d="M617.77,-895.78C617.77,-895.78 456.23,-895.78 456.23,-895.78 450.23,-895.78 444.23,-889.78 444.23,-883.78 444.23,-883.78 444.23,-841.99 444.23,-841.99 444.23,-835.99 450.23,-829.99 456.23,-829.99 456.23,-829.99 617.77,-829.99 617.77,-829.99 623.77,-829.99 629.77,-835.99 629.77,-841.99 629.77,-841.99 629.77,-883.78 629.77,-883.78 629.77,-889.78 623.77,-895.78 617.77,-895.78"/>
+<text xml:space="preserve" text-anchor="middle" x="537" y="-872.86" font-family="Arial" font-size="12.00" fill="white">Developer</text>
+<text xml:space="preserve" text-anchor="middle" x="537" y="-858.61" font-family="Arial" font-size="12.00" fill="white">[Person]</text>
+<text xml:space="preserve" text-anchor="middle" x="537" y="-844.36" font-family="Arial" font-size="12.00" fill="white">Types, saves, opens surfaces</text>
+</g>
+<!-- nvim -->
+<g id="node2" class="node">
+<title>nvim</title>
+<path fill="#207b85" stroke="#207b85" d="M630.9,-744.49C630.9,-744.49 443.1,-744.49 443.1,-744.49 437.1,-744.49 431.1,-738.49 431.1,-732.49 431.1,-732.49 431.1,-676.45 431.1,-676.45 431.1,-670.45 437.1,-664.45 443.1,-664.45 443.1,-664.45 630.9,-664.45 630.9,-664.45 636.9,-664.45 642.9,-670.45 642.9,-676.45 642.9,-676.45 642.9,-732.49 642.9,-732.49 642.9,-738.49 636.9,-744.49 630.9,-744.49"/>
+<text xml:space="preserve" text-anchor="middle" x="537" y="-721.57" font-family="Arial" font-size="12.00" fill="white">Neovim adapter</text>
+<text xml:space="preserve" text-anchor="middle" x="537" y="-707.32" font-family="Arial" font-size="12.00" fill="white">[Container: Lua hosted in Neovim]</text>
+<text xml:space="preserve" text-anchor="middle" x="537" y="-693.07" font-family="Arial" font-size="12.00" fill="white">Initial sync + buffer events</text>
+<text xml:space="preserve" text-anchor="middle" x="537" y="-678.82" font-family="Arial" font-size="12.00" fill="white">Cached freshness + Errors/Callers</text>
+</g>
+<!-- dev&#45;&gt;nvim -->
+<g id="edge1" class="edge">
+<title>dev&#45;&gt;nvim</title>
+<path fill="none" stroke="#53677b" d="M537,-829.86C537,-808.74 537,-780.61 537,-756.45"/>
+<polygon fill="#53677b" stroke="#53677b" points="540.5,-756.47 537,-746.47 533.5,-756.47 540.5,-756.47"/>
+<text xml:space="preserve" text-anchor="middle" x="601.12" y="-796.49" font-family="Arial" font-size="10.00">Edits; pulls results voluntarily</text>
+</g>
+<!-- input -->
+<g id="node3" class="node">
+<title>input</title>
+<path fill="#e2f2f2" stroke="#207b85" d="M653.15,-594.45C653.15,-599.97 604.68,-604.45 545,-604.45 485.32,-604.45 436.85,-599.97 436.85,-594.45 436.85,-594.45 436.85,-504.4 436.85,-504.4 436.85,-498.88 485.32,-494.4 545,-494.4 604.68,-494.4 653.15,-498.88 653.15,-504.4 653.15,-504.4 653.15,-594.45 653.15,-594.45"/>
+<path fill="none" stroke="#207b85" d="M653.15,-594.45C653.15,-588.93 604.68,-584.44 545,-584.44 485.32,-584.44 436.85,-588.93 436.85,-594.45"/>
+<text xml:space="preserve" text-anchor="middle" x="545" y="-566.53" font-family="Arial" font-size="12.00">Input journal transport</text>
+<text xml:space="preserve" text-anchor="middle" x="545" y="-552.28" font-family="Arial" font-size="12.00">[Data store: JSONL files]</text>
+<text xml:space="preserve" text-anchor="middle" x="545" y="-538.03" font-family="Arial" font-size="12.00">Versioned events + session identity</text>
+<text xml:space="preserve" text-anchor="middle" x="545" y="-523.78" font-family="Arial" font-size="12.00">Ordered append and retry</text>
+</g>
+<!-- nvim&#45;&gt;input -->
+<g id="edge2" class="edge">
+<title>nvim&#45;&gt;input</title>
+<path fill="none" stroke="#53677b" d="M539.06,-664.06C539.83,-649.38 540.72,-632.3 541.58,-615.9"/>
+<polygon fill="#53677b" stroke="#53677b" points="545.06,-616.38 542.08,-606.21 538.07,-616.02 545.06,-616.38"/>
+<text xml:space="preserve" text-anchor="middle" x="635.26" y="-630.95" font-family="Arial" font-size="10.00">Full canonical text + lifecycle + diagnostics</text>
+</g>
+<!-- lsp -->
+<g id="node8" class="node">
+<title>lsp</title>
+<path fill="#e9eff5" stroke="#207b85" d="M950.4,-582.32C950.4,-582.32 753.6,-582.32 753.6,-582.32 747.6,-582.32 741.6,-576.32 741.6,-570.32 741.6,-570.32 741.6,-528.53 741.6,-528.53 741.6,-522.53 747.6,-516.53 753.6,-516.53 753.6,-516.53 950.4,-516.53 950.4,-516.53 956.4,-516.53 962.4,-522.53 962.4,-528.53 962.4,-528.53 962.4,-570.32 962.4,-570.32 962.4,-576.32 956.4,-582.32 950.4,-582.32"/>
+<text xml:space="preserve" text-anchor="middle" x="852" y="-559.4" font-family="Arial" font-size="12.00">Project language servers</text>
+<text xml:space="preserve" text-anchor="middle" x="852" y="-545.15" font-family="Arial" font-size="12.00">[External systems]</text>
+<text xml:space="preserve" text-anchor="middle" x="852" y="-530.9" font-family="Arial" font-size="12.00">Diagnostics; references in later slice</text>
+</g>
+<!-- nvim&#45;&gt;lsp -->
+<g id="edge9" class="edge">
+<title>nvim&#45;&gt;lsp</title>
+<path fill="none" stroke="#53677b" d="M643.29,-678.66C675.38,-669.03 710.03,-656.4 740,-640.45 765.32,-626.98 790.49,-607.45 810.54,-590.02"/>
+<polygon fill="#53677b" stroke="#53677b" points="812.79,-592.7 817.95,-583.45 808.15,-587.46 812.79,-592.7"/>
+<text xml:space="preserve" text-anchor="middle" x="840.42" y="-630.95" font-family="Arial" font-size="10.00">Versioned query; asynchronous reply</text>
+</g>
+<!-- engine -->
+<g id="node4" class="node">
+<title>engine</title>
+<path fill="#207b85" stroke="#207b85" d="M713.15,-434.4C713.15,-434.4 430.85,-434.4 430.85,-434.4 424.85,-434.4 418.85,-428.4 418.85,-422.4 418.85,-422.4 418.85,-352.11 418.85,-352.11 418.85,-346.11 424.85,-340.11 430.85,-340.11 430.85,-340.11 713.15,-340.11 713.15,-340.11 719.15,-340.11 725.15,-346.11 725.15,-352.11 725.15,-352.11 725.15,-422.4 725.15,-422.4 725.15,-428.4 719.15,-434.4 713.15,-434.4"/>
+<text xml:space="preserve" text-anchor="middle" x="572" y="-411.48" font-family="Arial" font-size="12.00" fill="white">Engine</text>
+<text xml:space="preserve" text-anchor="middle" x="572" y="-397.23" font-family="Arial" font-size="12.00" fill="white">[Container: Python process]</text>
+<text xml:space="preserve" text-anchor="middle" x="572" y="-382.98" font-family="Arial" font-size="12.00" fill="white">Coordinator owns state</text>
+<text xml:space="preserve" text-anchor="middle" x="572" y="-368.73" font-family="Arial" font-size="12.00" fill="white">Disk / overlay views + immutable jobs</text>
+<text xml:space="preserve" text-anchor="middle" x="572" y="-354.48" font-family="Arial" font-size="12.00" fill="white">Workers return results; coordinator checks freshness</text>
+</g>
+<!-- input&#45;&gt;engine -->
+<g id="edge3" class="edge">
+<title>input&#45;&gt;engine</title>
+<path fill="none" stroke="#53677b" d="M554.14,-494.2C556.76,-478.64 559.63,-461.63 562.29,-445.88"/>
+<polygon fill="#53677b" stroke="#53677b" points="565.71,-446.61 563.92,-436.16 558.81,-445.44 565.71,-446.61"/>
+<text xml:space="preserve" text-anchor="middle" x="639.99" y="-460.9" font-family="Arial" font-size="10.00">Validate, journal, reduce; deduplicate</text>
+</g>
+<!-- durable -->
+<g id="node5" class="node">
+<title>durable</title>
+<path fill="#e2f2f2" stroke="#207b85" d="M612.9,-260.31C612.9,-265.83 556.02,-270.31 486,-270.31 415.98,-270.31 359.1,-265.83 359.1,-260.31 359.1,-260.31 359.1,-170.26 359.1,-170.26 359.1,-164.74 415.98,-160.26 486,-160.26 556.02,-160.26 612.9,-164.74 612.9,-170.26 612.9,-170.26 612.9,-260.31 612.9,-260.31"/>
+<path fill="none" stroke="#207b85" d="M612.9,-260.31C612.9,-254.79 556.02,-250.3 486,-250.3 415.98,-250.3 359.1,-254.79 359.1,-260.31"/>
+<text xml:space="preserve" text-anchor="middle" x="486" y="-232.39" font-family="Arial" font-size="12.00">Durable engine state</text>
+<text xml:space="preserve" text-anchor="middle" x="486" y="-218.14" font-family="Arial" font-size="12.00">[Data store: files]</text>
+<text xml:space="preserve" text-anchor="middle" x="486" y="-203.89" font-family="Arial" font-size="12.00">Objects, manifests, accepted&#45;event journal</text>
+<text xml:space="preserve" text-anchor="middle" x="486" y="-189.64" font-family="Arial" font-size="12.00">Checkpoint, evidence and logs</text>
+</g>
+<!-- engine&#45;&gt;durable -->
+<g id="edge4" class="edge">
+<title>engine&#45;&gt;durable</title>
+<path fill="none" stroke="#53677b" d="M418.65,-358.63C375.67,-347.61 337.06,-333.37 324,-316.11 305.73,-291.95 321.32,-272.29 348.88,-257.01"/>
+<polygon fill="#53677b" stroke="#53677b" points="350.43,-260.15 357.74,-252.48 347.24,-253.92 350.43,-260.15"/>
+<text xml:space="preserve" text-anchor="middle" x="421.5" y="-306.61" font-family="Arial" font-size="10.00">Commit input objects, job intents and results</text>
+</g>
+<!-- output -->
+<g id="node6" class="node">
+<title>output</title>
+<path fill="#e2f2f2" stroke="#207b85" d="M230.03,-268.32C230.03,-274.83 182.05,-280.11 123,-280.11 63.95,-280.11 15.97,-274.83 15.97,-268.32 15.97,-268.32 15.97,-162.25 15.97,-162.25 15.97,-155.74 63.95,-150.46 123,-150.46 182.05,-150.46 230.03,-155.74 230.03,-162.25 230.03,-162.25 230.03,-268.32 230.03,-268.32"/>
+<path fill="none" stroke="#207b85" d="M230.03,-268.32C230.03,-261.82 182.05,-256.54 123,-256.54 63.95,-256.54 15.97,-261.82 15.97,-268.32"/>
+<text xml:space="preserve" text-anchor="middle" x="123" y="-239.51" font-family="Arial" font-size="12.00">Editor output</text>
+<text xml:space="preserve" text-anchor="middle" x="123" y="-225.26" font-family="Arial" font-size="12.00">[Data store: files]</text>
+<text xml:space="preserve" text-anchor="middle" x="123" y="-211.01" font-family="Arial" font-size="12.00">Atomic findings.jsonl + engine.json</text>
+<text xml:space="preserve" text-anchor="middle" x="123" y="-196.76" font-family="Arial" font-size="12.00">Correlated outbox requests</text>
+<text xml:space="preserve" text-anchor="middle" x="123" y="-182.51" font-family="Arial" font-size="12.00">Board + quickfix projections</text>
+</g>
+<!-- engine&#45;&gt;output -->
+<g id="edge6" class="edge">
+<title>engine&#45;&gt;output</title>
+<path fill="none" stroke="#53677b" d="M418.38,-384.78C294.77,-379.94 135.05,-364.19 93.5,-316.11 87.35,-309 84.92,-300.65 84.95,-291.87"/>
+<polygon fill="#53677b" stroke="#53677b" points="88.41,-292.4 86.04,-282.07 81.46,-291.62 88.41,-292.4"/>
+<text xml:space="preserve" text-anchor="middle" x="200.75" y="-306.61" font-family="Arial" font-size="10.00">Publish invalidation / current evidence / heartbeat</text>
+</g>
+<!-- project -->
+<g id="node7" class="node">
+<title>project</title>
+<path fill="#e9eff5" stroke="#207b85" d="M1379.03,-248.18C1379.03,-248.18 1242.97,-248.18 1242.97,-248.18 1236.97,-248.18 1230.97,-242.18 1230.97,-236.18 1230.97,-236.18 1230.97,-194.39 1230.97,-194.39 1230.97,-188.39 1236.97,-182.39 1242.97,-182.39 1242.97,-182.39 1379.03,-182.39 1379.03,-182.39 1385.03,-182.39 1391.03,-188.39 1391.03,-194.39 1391.03,-194.39 1391.03,-236.18 1391.03,-236.18 1391.03,-242.18 1385.03,-248.18 1379.03,-248.18"/>
+<text xml:space="preserve" text-anchor="middle" x="1311" y="-225.26" font-family="Arial" font-size="12.00">Target project</text>
+<text xml:space="preserve" text-anchor="middle" x="1311" y="-211.01" font-family="Arial" font-size="12.00">[External system]</text>
+<text xml:space="preserve" text-anchor="middle" x="1311" y="-196.76" font-family="Arial" font-size="12.00">Saved disk + Git + pytest</text>
+</g>
+<!-- engine&#45;&gt;project -->
+<g id="edge8" class="edge">
+<title>engine&#45;&gt;project</title>
+<path fill="none" stroke="#53677b" d="M725.48,-385.07C843.64,-380.02 1009.48,-363.84 1147,-316.11 1187.67,-302 1229.04,-276.72 1260.05,-255.13"/>
+<polygon fill="#53677b" stroke="#53677b" points="1261.96,-258.07 1268.1,-249.44 1257.91,-252.36 1261.96,-258.07"/>
+<text xml:space="preserve" text-anchor="middle" x="1279.49" y="-306.61" font-family="Arial" font-size="10.00">Observe disk; saved&#45;revision tests under policy</text>
+</g>
+<!-- model -->
+<g id="node9" class="node">
+<title>model</title>
+<path fill="#e9eff5" stroke="#207b85" d="M917.9,-255.31C917.9,-255.31 754.1,-255.31 754.1,-255.31 748.1,-255.31 742.1,-249.31 742.1,-243.31 742.1,-243.31 742.1,-187.27 742.1,-187.27 742.1,-181.27 748.1,-175.27 754.1,-175.27 754.1,-175.27 917.9,-175.27 917.9,-175.27 923.9,-175.27 929.9,-181.27 929.9,-187.27 929.9,-187.27 929.9,-243.31 929.9,-243.31 929.9,-249.31 923.9,-255.31 917.9,-255.31"/>
+<text xml:space="preserve" text-anchor="middle" x="836" y="-232.39" font-family="Arial" font-size="12.00">Optional local model endpoint</text>
+<text xml:space="preserve" text-anchor="middle" x="836" y="-218.14" font-family="Arial" font-size="12.00">[External system: Ollama]</text>
+<text xml:space="preserve" text-anchor="middle" x="836" y="-203.89" font-family="Arial" font-size="12.00">Qwen3&#45;Coder first evaluation</text>
+<text xml:space="preserve" text-anchor="middle" x="836" y="-189.64" font-family="Arial" font-size="12.00">Hosted API comparison later</text>
+</g>
+<!-- engine&#45;&gt;model -->
+<g id="edge10" class="edge">
+<title>engine&#45;&gt;model</title>
+<path fill="none" stroke="#53677b" d="M658.87,-339.67C672.13,-332.05 685.54,-324.05 698,-316.11 723.98,-299.56 751.67,-279.95 775.37,-262.51"/>
+<polygon fill="#53677b" stroke="#53677b" points="777.41,-265.36 783.37,-256.6 773.25,-259.73 777.41,-265.36"/>
+<text xml:space="preserve" text-anchor="middle" x="808.35" y="-306.61" font-family="Arial" font-size="10.00">Breaking sites only; does not block findings</text>
+</g>
+<!-- qmd -->
+<g id="node10" class="node">
+<title>qmd</title>
+<path fill="#fff0d2" stroke="#207b85" stroke-dasharray="5,2" d="M1164.78,-248.18C1164.78,-248.18 985.23,-248.18 985.23,-248.18 979.23,-248.18 973.23,-242.18 973.23,-236.18 973.23,-236.18 973.23,-194.39 973.23,-194.39 973.23,-188.39 979.23,-182.39 985.23,-182.39 985.23,-182.39 1164.78,-182.39 1164.78,-182.39 1170.78,-182.39 1176.78,-188.39 1176.78,-194.39 1176.78,-194.39 1176.78,-236.18 1176.78,-236.18 1176.78,-242.18 1170.78,-248.18 1164.78,-248.18"/>
+<text xml:space="preserve" text-anchor="middle" x="1075" y="-225.26" font-family="Arial" font-size="12.00">Optional QMD retrieval</text>
+<text xml:space="preserve" text-anchor="middle" x="1075" y="-211.01" font-family="Arial" font-size="12.00">[External local system]</text>
+<text xml:space="preserve" text-anchor="middle" x="1075" y="-196.76" font-family="Arial" font-size="12.00">Project&#45;scoped document search</text>
+</g>
+<!-- engine&#45;&gt;qmd -->
+<g id="edge11" class="edge">
+<title>engine&#45;&gt;qmd</title>
+<path fill="none" stroke="#53677b" stroke-dasharray="5,2" d="M725.53,-366.4C785.39,-355.66 853.73,-339.62 913,-316.11 952.1,-300.6 992.38,-275.83 1023,-254.84"/>
+<polygon fill="#53677b" stroke="#53677b" points="1024.72,-257.9 1030.93,-249.32 1020.72,-252.16 1024.72,-257.9"/>
+<text xml:space="preserve" text-anchor="middle" x="1036.76" y="-306.61" font-family="Arial" font-size="10.00">Only when reasoning needs additional context</text>
+</g>
+<!-- durable&#45;&gt;engine -->
+<g id="edge5" class="edge">
+<title>durable&#45;&gt;engine</title>
+<path fill="none" stroke="#53677b" d="M513.59,-270.81C523.08,-289.57 533.73,-310.61 543.3,-329.54"/>
+<polygon fill="#53677b" stroke="#53677b" points="540.18,-331.12 547.82,-338.46 546.43,-327.96 540.18,-331.12"/>
+<text xml:space="preserve" text-anchor="middle" x="611.02" y="-306.61" font-family="Arial" font-size="10.00">Recover checkpoint + journal suffix</text>
+</g>
+<!-- output&#45;&gt;nvim -->
+<g id="edge7" class="edge">
+<title>output&#45;&gt;nvim</title>
+<path fill="none" stroke="#53677b" d="M75.96,-280.46C72.23,-292.32 71.68,-304.59 77,-316.11 152.36,-479.45 334.65,-598.4 445.8,-658.71"/>
+<polygon fill="#53677b" stroke="#53677b" points="443.87,-661.64 454.33,-663.29 447.18,-655.48 443.87,-661.64"/>
+<text xml:space="preserve" text-anchor="middle" x="291.93" y="-460.9" font-family="Arial" font-size="10.00">Read complete finding sets; reject stale requests</text>
+</g>
+<!-- kb -->
+<g id="node11" class="node">
+<title>kb</title>
+<path fill="#fff0d2" stroke="#207b85" stroke-dasharray="5,2" d="M1204.15,-82.24C1204.15,-86.78 1146.26,-90.46 1075,-90.46 1003.74,-90.46 945.85,-86.78 945.85,-82.24 945.85,-82.24 945.85,-8.22 945.85,-8.22 945.85,-3.69 1003.74,0 1075,0 1146.26,0 1204.15,-3.69 1204.15,-8.22 1204.15,-8.22 1204.15,-82.24 1204.15,-82.24"/>
+<path fill="none" stroke="#207b85" stroke-dasharray="5,2" d="M1204.15,-82.24C1204.15,-77.7 1146.26,-74.01 1075,-74.01 1003.74,-74.01 945.85,-77.7 945.85,-82.24"/>
+<text xml:space="preserve" text-anchor="middle" x="1075" y="-55.21" font-family="Arial" font-size="12.00">Curated project knowledge</text>
+<text xml:space="preserve" text-anchor="middle" x="1075" y="-40.96" font-family="Arial" font-size="12.00">[External document store]</text>
+<text xml:space="preserve" text-anchor="middle" x="1075" y="-26.71" font-family="Arial" font-size="12.00">Decisions, proposals, versioned references</text>
+</g>
+<!-- qmd&#45;&gt;kb -->
+<g id="edge12" class="edge">
+<title>qmd&#45;&gt;kb</title>
+<path fill="none" stroke="#53677b" stroke-dasharray="5,2" d="M1075,-182.28C1075,-159.72 1075,-128.9 1075,-102.3"/>
+<polygon fill="#53677b" stroke="#53677b" points="1078.5,-102.32 1075,-92.32 1071.5,-102.32 1078.5,-102.32"/>
+<text xml:space="preserve" text-anchor="middle" x="1174" y="-116.96" font-family="Arial" font-size="10.00">Index selected sources; preserve provenance</text>
+</g>
+</g>
+</svg>
+</div></section>
+<section><h2>BPMN 2.0 · Effective-content analysis</h2><p>The process starts after durable acceptance. Saved tests are independently scheduled; they and optional model requests must pass equivalent final freshness checks.</p><div class="diagram"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 1200" role="img" aria-label="Proposed BPMN editor feedback process"><rect width="1030" height="1200" fill="white"/><defs><marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0 0 L10 4 L0 8" fill="#53677b"/></marker></defs><style>text{font:15px Arial;fill:#17334d}</style><polyline points="450.0,74 450.0,125" fill="none" stroke="#53677b" stroke-width="2" marker-end="url(#arrow)"/><polyline points="450.0,201 450.0,265" fill="none" stroke="#53677b" stroke-width="2" marker-end="url(#arrow)"/><polyline points="482,297.0 830,297.0" fill="none" stroke="#53677b" stroke-width="2" marker-end="url(#arrow)"/><text x="664.0" y="289.0">no</text><polyline points="450.0,329 450.0,400" fill="none" stroke="#53677b" stroke-width="2" marker-end="url(#arrow)"/><text x="458.0" y="356.5">yes</text><polyline points="450.0,476 450.0,540" fill="none" stroke="#53677b" stroke-width="2" marker-end="url(#arrow)"/><polyline points="450.0,616 450.0,680" fill="none" stroke="#53677b" stroke-width="2" marker-end="url(#arrow)"/><polyline points="450.0,756 450.0,820" fill="none" stroke="#53677b" stroke-width="2" marker-end="url(#arrow)"/><polyline points="482,852.0 715,852.0" fill="none" stroke="#53677b" stroke-width="2" marker-end="url(#arrow)"/><text x="606.5" y="844.0">no</text><polyline points="850.0,890 850.0,935" fill="none" stroke="#53677b" stroke-width="2" marker-end="url(#arrow)"/><polyline points="450.0,884 450.0,970" fill="none" stroke="#53677b" stroke-width="2" marker-end="url(#arrow)"/><text x="458.0" y="919.0">yes</text><polyline points="450.0,1046 450.0,1110" fill="none" stroke="#53677b" stroke-width="2" marker-end="url(#arrow)"/><circle cx="450" cy="52" r="21" fill="white" stroke="#207b85" stroke-width="2"/><text x="414" y="48" text-anchor="end">Content event committed</text><rect x="315" y="125" width="270" height="76" rx="10" fill="#e2f2f2" stroke="#207b85" stroke-width="2"/><text x="450.0" y="150.0" text-anchor="middle">Reconcile disk / overlay;</text><text x="450.0" y="168.0" text-anchor="middle">independently enqueue eligible</text><text x="450.0" y="186.0" text-anchor="middle">saved tests</text><path d="M450,265 L482,297 L450,329 L418,297 Z" fill="#fff0d2" stroke="#ad6800" stroke-width="2"/><text x="450" y="303" text-anchor="middle">×</text><text x="404" y="283" text-anchor="end">Effective view changed?</text><circle cx="852" cy="297" r="21" fill="white" stroke="#207b85" stroke-width="4"/><text x="816" y="293" text-anchor="end">No structural work</text><rect x="315" y="400" width="270" height="76" rx="10" fill="#e2f2f2" stroke="#207b85" stroke-width="2"/><text x="450.0" y="425.0" text-anchor="middle">Invalidate dependencies and</text><text x="450.0" y="443.0" text-anchor="middle">publish outdated findings</text><text x="450.0" y="461.0" text-anchor="middle">immediately</text><rect x="315" y="540" width="270" height="76" rx="10" fill="#e2f2f2" stroke="#207b85" stroke-width="2"/><text x="450.0" y="565.0" text-anchor="middle">Debounce; capture immutable</text><text x="450.0" y="583.0" text-anchor="middle">effective inputs and search</text><text x="450.0" y="601.0" text-anchor="middle">generation</text><rect x="315" y="680" width="270" height="76" rx="10" fill="#e2f2f2" stroke="#207b85" stroke-width="2"/><text x="450.0" y="714.0" text-anchor="middle">Analyze callers using disk +</text><text x="450.0" y="732.0" text-anchor="middle">overlay candidates; return result</text><path d="M450,820 L482,852 L450,884 L418,852 Z" fill="#fff0d2" stroke="#ad6800" stroke-width="2"/><text x="450" y="858" text-anchor="middle">×</text><text x="404" y="838" text-anchor="end">All inputs and search</text><text x="404" y="856" text-anchor="end">generation still current?</text><rect x="715" y="814" width="270" height="76" rx="10" fill="#e2f2f2" stroke="#207b85" stroke-width="2"/><text x="850.0" y="848.0" text-anchor="middle">Discard obsolete result; persist</text><text x="850.0" y="866.0" text-anchor="middle">latest job intent</text><circle cx="850" cy="957" r="21" fill="white" stroke="#207b85" stroke-width="4"/><text x="814" y="953" text-anchor="end">New work queued</text><rect x="315" y="970" width="270" height="76" rx="10" fill="#e2f2f2" stroke="#207b85" stroke-width="2"/><text x="450.0" y="995.0" text-anchor="middle">Commit evidence; remove resolved</text><text x="450.0" y="1013.0" text-anchor="middle">findings; publish complete set</text><text x="450.0" y="1031.0" text-anchor="middle">atomically</text><circle cx="450" cy="1132" r="21" fill="white" stroke="#207b85" stroke-width="4"/><text x="414" y="1128" text-anchor="end">Ready for voluntary reading</text></svg></div></section>
+<section><h2>Implementation order</h2><ol><li>Canonical content, explicit disk/overlay views and revision history.</li><li>Coordinator ownership, journal/checkpoint recovery and worker results.</li><li>Atomic findings/status publication and workspace-scoped rendering.</li><li>Separate save eligibility from structural-change detection.</li><li>Versioned diagnostics, then LSP references.</li><li>Optional validated suggestions that never delay deterministic evidence.</li></ol></section>
+</main></html>

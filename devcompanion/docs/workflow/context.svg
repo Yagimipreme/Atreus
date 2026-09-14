@@ -1,0 +1,83 @@
+<svg width="1453pt" height="284pt"
+ viewBox="0.00 0.00 1453.00 284.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(21.6 262.84)">
+<title>context</title>
+<text xml:space="preserve" text-anchor="middle" x="705.02" y="-216.34" font-family="Arial" font-size="22.00">C4 · Level 1 · System context</text>
+<!-- developer -->
+<g id="node1" class="node">
+<title>developer</title>
+<path fill="#163e61" stroke="#62758a" d="M256.68,-70.74C256.68,-70.74 12,-70.74 12,-70.74 6,-70.74 0,-64.74 0,-58.74 0,-58.74 0,-14.7 0,-14.7 0,-8.7 6,-2.7 12,-2.7 12,-2.7 256.68,-2.7 256.68,-2.7 262.68,-2.7 268.68,-8.7 268.68,-14.7 268.68,-14.7 268.68,-58.74 268.68,-58.74 268.68,-64.74 262.68,-70.74 256.68,-70.74"/>
+<text xml:space="preserve" text-anchor="middle" x="134.34" y="-46.87" font-family="Arial" font-size="13.00" fill="white">Developer</text>
+<text xml:space="preserve" text-anchor="middle" x="134.34" y="-31.87" font-family="Arial" font-size="13.00" fill="white">[Person]</text>
+<text xml:space="preserve" text-anchor="middle" x="134.34" y="-16.87" font-family="Arial" font-size="13.00" fill="white">Edits code; opens the panel on demand</text>
+</g>
+<!-- companion -->
+<g id="node2" class="node">
+<title>companion</title>
+<path fill="#207b85" stroke="#62758a" d="M855.86,-132.74C855.86,-132.74 573.68,-132.74 573.68,-132.74 567.68,-132.74 561.68,-126.74 561.68,-120.74 561.68,-120.74 561.68,-76.7 561.68,-76.7 561.68,-70.7 567.68,-64.7 573.68,-64.7 573.68,-64.7 855.86,-64.7 855.86,-64.7 861.86,-64.7 867.86,-70.7 867.86,-76.7 867.86,-76.7 867.86,-120.74 867.86,-120.74 867.86,-126.74 861.86,-132.74 855.86,-132.74"/>
+<text xml:space="preserve" text-anchor="middle" x="714.77" y="-108.87" font-family="Arial" font-size="13.00" fill="white">devcompanion</text>
+<text xml:space="preserve" text-anchor="middle" x="714.77" y="-93.87" font-family="Arial" font-size="13.00" fill="white">[Software system]</text>
+<text xml:space="preserve" text-anchor="middle" x="714.77" y="-78.87" font-family="Arial" font-size="13.00" fill="white">Observes buffers and files; prepares evidence</text>
+</g>
+<!-- developer&#45;&gt;companion -->
+<g id="edge1" class="edge">
+<title>developer&#45;&gt;companion</title>
+<path fill="none" stroke="#53677b" d="M269.13,-51.06C352.81,-60.03 461.19,-71.65 549.99,-81.17"/>
+<polygon fill="#53677b" stroke="#53677b" points="549.46,-84.63 559.77,-82.22 550.2,-77.67 549.46,-84.63"/>
+<text xml:space="preserve" text-anchor="middle" x="415.18" y="-81.72" font-family="Arial" font-size="11.00">Starts observation; types; opens the panel</text>
+</g>
+<!-- project -->
+<g id="node3" class="node">
+<title>project</title>
+<path fill="#e9eff5" stroke="#62758a" d="M1398.04,-70.74C1398.04,-70.74 1148.86,-70.74 1148.86,-70.74 1142.86,-70.74 1136.86,-64.74 1136.86,-58.74 1136.86,-58.74 1136.86,-14.7 1136.86,-14.7 1136.86,-8.7 1142.86,-2.7 1148.86,-2.7 1148.86,-2.7 1398.04,-2.7 1398.04,-2.7 1404.04,-2.7 1410.04,-8.7 1410.04,-14.7 1410.04,-14.7 1410.04,-58.74 1410.04,-58.74 1410.04,-64.74 1404.04,-70.74 1398.04,-70.74"/>
+<text xml:space="preserve" text-anchor="middle" x="1273.45" y="-46.87" font-family="Arial" font-size="13.00">Target project</text>
+<text xml:space="preserve" text-anchor="middle" x="1273.45" y="-31.87" font-family="Arial" font-size="13.00">[External software system]</text>
+<text xml:space="preserve" text-anchor="middle" x="1273.45" y="-16.87" font-family="Arial" font-size="13.00">Working tree, Git history and pytest tests</text>
+</g>
+<!-- developer&#45;&gt;project -->
+<g id="edge2" class="edge">
+<title>developer&#45;&gt;project</title>
+<path fill="none" stroke="#53677b" d="M268.77,-13.82C279.21,-12.58 289.6,-11.52 299.68,-10.72 408.65,-2.16 843.33,8.1 1105.86,-11.72 1112.31,-12.21 1118.88,-12.8 1125.51,-13.47"/>
+<polygon fill="#53677b" stroke="#53677b" points="1124.9,-16.92 1135.21,-14.51 1125.64,-9.96 1124.9,-16.92"/>
+<text xml:space="preserve" text-anchor="middle" x="714.77" y="-4.56" font-family="Arial" font-size="11.00">Edits and saves</text>
+</g>
+<!-- companion&#45;&gt;developer -->
+<g id="edge5" class="edge">
+<title>companion&#45;&gt;developer</title>
+<path fill="none" stroke="#53677b" d="M636.07,-64.26C604.1,-51.85 566.27,-39.4 530.68,-33.22 448.66,-18.99 355.63,-19.03 280.43,-23.01"/>
+<polygon fill="#53677b" stroke="#53677b" points="280.29,-19.51 270.5,-23.57 280.68,-26.5 280.29,-19.51"/>
+<text xml:space="preserve" text-anchor="middle" x="415.18" y="-36.27" font-family="Arial" font-size="11.00">Panel: findings, revision, engine and model state</text>
+</g>
+<!-- companion&#45;&gt;project -->
+<g id="edge3" class="edge">
+<title>companion&#45;&gt;project</title>
+<path fill="none" stroke="#53677b" d="M868.25,-81.74C948.34,-72.82 1046.04,-61.94 1125.32,-53.11"/>
+<polygon fill="#53677b" stroke="#53677b" points="1125.32,-56.63 1134.87,-52.05 1124.55,-49.67 1125.32,-56.63"/>
+<text xml:space="preserve" text-anchor="middle" x="1002.36" y="-93.45" font-family="Arial" font-size="11.00">Reads code and HEAD; invokes pytest</text>
+<text xml:space="preserve" text-anchor="middle" x="1002.36" y="-79.95" font-family="Arial" font-size="11.00">Saved content only</text>
+</g>
+<!-- model -->
+<g id="node4" class="node">
+<title>model</title>
+<path fill="#e9eff5" stroke="#62758a" d="M1392.04,-207.74C1392.04,-207.74 1154.86,-207.74 1154.86,-207.74 1148.86,-207.74 1142.86,-201.74 1142.86,-195.74 1142.86,-195.74 1142.86,-151.7 1142.86,-151.7 1142.86,-145.7 1148.86,-139.7 1154.86,-139.7 1154.86,-139.7 1392.04,-139.7 1392.04,-139.7 1398.04,-139.7 1404.04,-145.7 1404.04,-151.7 1404.04,-151.7 1404.04,-195.74 1404.04,-195.74 1404.04,-201.74 1398.04,-207.74 1392.04,-207.74"/>
+<text xml:space="preserve" text-anchor="middle" x="1273.45" y="-183.87" font-family="Arial" font-size="13.00">Optional model server</text>
+<text xml:space="preserve" text-anchor="middle" x="1273.45" y="-168.87" font-family="Arial" font-size="13.00">[External software system]</text>
+<text xml:space="preserve" text-anchor="middle" x="1273.45" y="-153.87" font-family="Arial" font-size="13.00">Ollama / OpenAI&#45;compatible HTTP API</text>
+</g>
+<!-- companion&#45;&gt;model -->
+<g id="edge6" class="edge">
+<title>companion&#45;&gt;model</title>
+<path fill="none" stroke="#53677b" d="M868.25,-119.27C950.34,-130.33 1050.92,-143.88 1131.22,-154.69"/>
+<polygon fill="#53677b" stroke="#53677b" points="1130.53,-158.13 1140.91,-156 1131.47,-151.2 1130.53,-158.13"/>
+<text xml:space="preserve" text-anchor="middle" x="1002.36" y="-166.01" font-family="Arial" font-size="11.00">Requests a sentence for breaking evidence</text>
+<text xml:space="preserve" text-anchor="middle" x="1002.36" y="-152.51" font-family="Arial" font-size="11.00">Only when configured</text>
+</g>
+<!-- project&#45;&gt;companion -->
+<g id="edge4" class="edge">
+<title>project&#45;&gt;companion</title>
+<path fill="none" stroke="#53677b" d="M1136.62,-23.73C1065.33,-19.86 976.83,-19.7 898.86,-33.22 867.16,-38.72 833.69,-49.2 804.16,-60.2"/>
+<polygon fill="#53677b" stroke="#53677b" points="802.99,-56.9 794.89,-63.72 805.48,-63.44 802.99,-56.9"/>
+<text xml:space="preserve" text-anchor="middle" x="1002.36" y="-36.27" font-family="Arial" font-size="11.00">File changes, callers, test results</text>
+</g>
+</g>
+</svg>

@@ -1,0 +1,31 @@
+digraph proposed {
+ graph [rankdir=TB, bgcolor=white, fontname="Arial", fontsize=22, label="PROPOSED · C4 level 2 · Editor feedback loop", labelloc=t, pad=.3, nodesep=.6, ranksep=.65];
+ node [shape=box, style="rounded,filled", fillcolor="#e2f2f2", color="#207b85", fontname="Arial", fontsize=12, margin=".2,.16"];
+ edge [fontname="Arial", fontsize=10, color="#53677b"];
+ dev [label="Developer\n[Person]\nTypes, saves, opens surfaces", fillcolor="#163e61", fontcolor=white];
+ subgraph cluster_system {
+  label="devcompanion · software system"; color="#207b85"; style=rounded;
+  nvim [label="Neovim adapter\n[Container: Lua hosted in Neovim]\nInitial sync + buffer events\nCached freshness + Errors/Callers", fillcolor="#207b85", fontcolor=white];
+  input [label="Input journal transport\n[Data store: JSONL files]\nVersioned events + session identity\nOrdered append and retry", shape=cylinder];
+  engine [label="Engine\n[Container: Python process]\nCoordinator owns state\nDisk / overlay views + immutable jobs\nWorkers return results; coordinator checks freshness", fillcolor="#207b85", fontcolor=white];
+  durable [label="Durable engine state\n[Data store: files]\nObjects, manifests, accepted-event journal\nCheckpoint, evidence and logs", shape=cylinder];
+  output [label="Editor output\n[Data store: files]\nAtomic findings.jsonl + engine.json\nCorrelated outbox requests\nBoard + quickfix projections", shape=cylinder];
+ }
+ project [label="Target project\n[External system]\nSaved disk + Git + pytest", fillcolor="#e9eff5"];
+ lsp [label="Project language servers\n[External systems]\nDiagnostics; references in later slice", fillcolor="#e9eff5"];
+ model [label="Optional local model endpoint\n[External system: Ollama]\nQwen3-Coder first evaluation\nHosted API comparison later", fillcolor="#e9eff5"];
+ qmd [label="Optional QMD retrieval\n[External local system]\nProject-scoped document search", fillcolor="#fff0d2", style="rounded,filled,dashed"];
+ kb [label="Curated project knowledge\n[External document store]\nDecisions, proposals, versioned references", shape=cylinder, fillcolor="#fff0d2", style="filled,dashed"];
+ dev -> nvim [label="Edits; pulls results voluntarily"];
+ nvim -> input [label="Full canonical text + lifecycle + diagnostics"];
+ input -> engine [label="Validate, journal, reduce; deduplicate"];
+ engine -> durable [label="Commit input objects, job intents and results"];
+ durable -> engine [label="Recover checkpoint + journal suffix"];
+ engine -> output [label="Publish invalidation / current evidence / heartbeat"];
+ output -> nvim [label="Read complete finding sets; reject stale requests"];
+ engine -> project [label="Observe disk; saved-revision tests under policy"];
+ nvim -> lsp [label="Versioned query; asynchronous reply"];
+ engine -> model [label="Breaking sites only; does not block findings"];
+ engine -> qmd [label="Only when reasoning needs additional context", style=dashed];
+ qmd -> kb [label="Index selected sources; preserve provenance", style=dashed];
+}

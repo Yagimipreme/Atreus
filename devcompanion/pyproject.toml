@@ -1,0 +1,23 @@
+[project]
+name = "devcompanion"
+version = "0.2.0"
+description = "Passive development companion: observe edits, snapshot, schedule cheap investigations, present evidence quietly."
+requires-python = ">=3.12"
+dependencies = [
+  "watchdog>=4",
+  "tree-sitter>=0.23",
+  "tree-sitter-python>=0.23",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+companion = "devcompanion.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/devcompanion"]

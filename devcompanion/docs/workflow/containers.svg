@@ -1,0 +1,157 @@
+<svg width="1335pt" height="823pt"
+ viewBox="0.00 0.00 1335.00 823.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(21.6 801.07)">
+<title>containers</title>
+<text xml:space="preserve" text-anchor="middle" x="645.95" y="-754.57" font-family="Arial" font-size="22.00">C4 · Level 2 · Containers</text>
+<g id="clust1" class="cluster">
+<title>cluster_system</title>
+<path fill="none" stroke="#207b85" d="M20,-8C20,-8 955,-8 955,-8 961,-8 967,-14 967,-20 967,-20 967,-630.87 967,-630.87 967,-636.87 961,-642.87 955,-642.87 955,-642.87 20,-642.87 20,-642.87 14,-642.87 8,-636.87 8,-630.87 8,-630.87 8,-20 8,-20 8,-14 14,-8 20,-8"/>
+<text xml:space="preserve" text-anchor="middle" x="487.5" y="-617.97" font-family="Arial" font-size="22.00">devcompanion · software system boundary</text>
+</g>
+<!-- dev -->
+<g id="node1" class="node">
+<title>dev</title>
+<path fill="#163e61" stroke="#62758a" d="M282.15,-745.97C282.15,-745.97 221.85,-745.97 221.85,-745.97 215.85,-745.97 209.85,-739.97 209.85,-733.97 209.85,-733.97 209.85,-707.87 209.85,-707.87 209.85,-701.87 215.85,-695.87 221.85,-695.87 221.85,-695.87 282.15,-695.87 282.15,-695.87 288.15,-695.87 294.15,-701.87 294.15,-707.87 294.15,-707.87 294.15,-733.97 294.15,-733.97 294.15,-739.97 288.15,-745.97 282.15,-745.97"/>
+<text xml:space="preserve" text-anchor="middle" x="252" y="-723.77" font-family="Arial" font-size="12.00" fill="white">Developer</text>
+<text xml:space="preserve" text-anchor="middle" x="252" y="-709.52" font-family="Arial" font-size="12.00" fill="white">[Person]</text>
+</g>
+<!-- adapter -->
+<g id="node4" class="node">
+<title>adapter</title>
+<path fill="#207b85" stroke="#62758a" d="M346.27,-601.37C346.27,-601.37 157.72,-601.37 157.72,-601.37 151.72,-601.37 145.72,-595.37 145.72,-589.37 145.72,-589.37 145.72,-549.02 145.72,-549.02 145.72,-543.02 151.72,-537.02 157.72,-537.02 157.72,-537.02 346.27,-537.02 346.27,-537.02 352.27,-537.02 358.27,-543.02 358.27,-549.02 358.27,-549.02 358.27,-589.37 358.27,-589.37 358.27,-595.37 352.27,-601.37 346.27,-601.37"/>
+<text xml:space="preserve" text-anchor="middle" x="252" y="-579.17" font-family="Arial" font-size="12.00" fill="white">Neovim adapter</text>
+<text xml:space="preserve" text-anchor="middle" x="252" y="-564.92" font-family="Arial" font-size="12.00" fill="white">[Container: Lua, hosted in Neovim]</text>
+<text xml:space="preserve" text-anchor="middle" x="252" y="-550.67" font-family="Arial" font-size="12.00" fill="white">Collect / transport / findings / panel</text>
+</g>
+<!-- dev&#45;&gt;adapter -->
+<g id="edge1" class="edge">
+<title>dev&#45;&gt;adapter</title>
+<path fill="none" stroke="#53677b" d="M209.59,-710.09C184.73,-701.91 155.32,-687.49 140.25,-662.87 127.12,-641.43 141.19,-622.63 163.26,-607.66"/>
+<polygon fill="#53677b" stroke="#53677b" points="164.88,-610.78 171.5,-602.5 161.17,-604.84 164.88,-610.78"/>
+<text xml:space="preserve" text-anchor="middle" x="220.12" y="-653.37" font-family="Arial" font-size="10.00">:CompanionStart / :CompanionPanel</text>
+</g>
+<!-- project -->
+<g id="node2" class="node">
+<title>project</title>
+<path fill="#e9eff5" stroke="#62758a" d="M1087.4,-87.47C1087.4,-87.47 986.6,-87.47 986.6,-87.47 980.6,-87.47 974.6,-81.47 974.6,-75.47 974.6,-75.47 974.6,-35.12 974.6,-35.12 974.6,-29.12 980.6,-23.12 986.6,-23.12 986.6,-23.12 1087.4,-23.12 1087.4,-23.12 1093.4,-23.12 1099.4,-29.12 1099.4,-35.12 1099.4,-35.12 1099.4,-75.47 1099.4,-75.47 1099.4,-81.47 1093.4,-87.47 1087.4,-87.47"/>
+<text xml:space="preserve" text-anchor="middle" x="1037" y="-65.27" font-family="Arial" font-size="12.00">Target project</text>
+<text xml:space="preserve" text-anchor="middle" x="1037" y="-51.02" font-family="Arial" font-size="12.00">[External system]</text>
+<text xml:space="preserve" text-anchor="middle" x="1037" y="-36.77" font-family="Arial" font-size="12.00">Disk + Git + pytest</text>
+</g>
+<!-- model -->
+<g id="node3" class="node">
+<title>model</title>
+<path fill="#e9eff5" stroke="#62758a" d="M1279.9,-87.47C1279.9,-87.47 1158.1,-87.47 1158.1,-87.47 1152.1,-87.47 1146.1,-81.47 1146.1,-75.47 1146.1,-75.47 1146.1,-35.12 1146.1,-35.12 1146.1,-29.12 1152.1,-23.12 1158.1,-23.12 1158.1,-23.12 1279.9,-23.12 1279.9,-23.12 1285.9,-23.12 1291.9,-29.12 1291.9,-35.12 1291.9,-35.12 1291.9,-75.47 1291.9,-75.47 1291.9,-81.47 1285.9,-87.47 1279.9,-87.47"/>
+<text xml:space="preserve" text-anchor="middle" x="1219" y="-65.27" font-family="Arial" font-size="12.00">Optional model server</text>
+<text xml:space="preserve" text-anchor="middle" x="1219" y="-51.02" font-family="Arial" font-size="12.00">[External system]</text>
+<text xml:space="preserve" text-anchor="middle" x="1219" y="-36.77" font-family="Arial" font-size="12.00">HTTP API</text>
+</g>
+<!-- adapter&#45;&gt;dev -->
+<g id="edge7" class="edge">
+<title>adapter&#45;&gt;dev</title>
+<path fill="none" stroke="#53677b" d="M279.9,-601.6C290.58,-615.66 301.5,-633.06 307,-650.87 311.1,-664.16 305.38,-676.71 296.29,-687.37"/>
+<polygon fill="#53677b" stroke="#53677b" points="293.92,-684.79 289.46,-694.4 298.94,-689.67 293.92,-684.79"/>
+<text xml:space="preserve" text-anchor="middle" x="361.22" y="-653.37" font-family="Arial" font-size="10.00">One read&#45;only side pane</text>
+</g>
+<!-- state -->
+<g id="node5" class="node">
+<title>state</title>
+<path fill="#e9eff5" stroke="#62758a" d="M639.77,-437.2C639.77,-442.62 576.68,-447.02 499,-447.02 421.32,-447.02 358.23,-442.62 358.23,-437.2 358.23,-437.2 358.23,-348.77 358.23,-348.77 358.23,-343.35 421.32,-338.95 499,-338.95 576.68,-338.95 639.77,-343.35 639.77,-348.77 639.77,-348.77 639.77,-437.2 639.77,-437.2"/>
+<path fill="none" stroke="#62758a" d="M639.77,-437.2C639.77,-431.78 576.68,-427.37 499,-427.37 421.32,-427.37 358.23,-431.78 358.23,-437.2"/>
+<text xml:space="preserve" text-anchor="middle" x="499" y="-410.09" font-family="Arial" font-size="12.00">Workspace state</text>
+<text xml:space="preserve" text-anchor="middle" x="499" y="-395.84" font-family="Arial" font-size="12.00">[Data store: local files]</text>
+<text xml:space="preserve" text-anchor="middle" x="499" y="-381.59" font-family="Arial" font-size="12.00">.companion/</text>
+<text xml:space="preserve" text-anchor="middle" x="499" y="-367.34" font-family="Arial" font-size="12.00">Inbox, events, snapshots, view, evidence, board</text>
+</g>
+<!-- adapter&#45;&gt;state -->
+<g id="edge2" class="edge">
+<title>adapter&#45;&gt;state</title>
+<path fill="none" stroke="#53677b" d="M296.73,-536.65C329.42,-513.59 374.75,-481.62 414.21,-453.79"/>
+<polygon fill="#53677b" stroke="#53677b" points="416.19,-456.68 422.34,-448.06 412.15,-450.96 416.19,-456.68"/>
+<text xml:space="preserve" text-anchor="middle" x="454.62" y="-494.52" font-family="Arial" font-size="10.00">Appends inbox.jsonl</text>
+<text xml:space="preserve" text-anchor="middle" x="454.62" y="-482.52" font-family="Arial" font-size="10.00">Canonical buffer text + editor events</text>
+</g>
+<!-- engine -->
+<g id="node6" class="node">
+<title>engine</title>
+<path fill="#207b85" stroke="#62758a" d="M734.52,-248.95C734.52,-248.95 517.47,-248.95 517.47,-248.95 511.47,-248.95 505.47,-242.95 505.47,-236.95 505.47,-236.95 505.47,-196.6 505.47,-196.6 505.47,-190.6 511.47,-184.6 517.47,-184.6 517.47,-184.6 734.52,-184.6 734.52,-184.6 740.52,-184.6 746.52,-190.6 746.52,-196.6 746.52,-196.6 746.52,-236.95 746.52,-236.95 746.52,-242.95 740.52,-248.95 734.52,-248.95"/>
+<text xml:space="preserve" text-anchor="middle" x="626" y="-226.75" font-family="Arial" font-size="12.00" fill="white">Engine</text>
+<text xml:space="preserve" text-anchor="middle" x="626" y="-212.5" font-family="Arial" font-size="12.00" fill="white">[Container: Python process]</text>
+<text xml:space="preserve" text-anchor="middle" x="626" y="-198.25" font-family="Arial" font-size="12.00" fill="white">CLI + producers + one scheduler worker</text>
+</g>
+<!-- state&#45;&gt;engine -->
+<g id="edge3" class="edge">
+<title>state&#45;&gt;engine</title>
+<path fill="none" stroke="#53677b" d="M484.04,-338.66C481.68,-319.51 482.83,-298.56 493.25,-281.95 499.71,-271.66 508.33,-262.97 518.1,-255.66"/>
+<polygon fill="#53677b" stroke="#53677b" points="519.84,-258.71 526.12,-250.17 515.89,-252.93 519.84,-258.71"/>
+<text xml:space="preserve" text-anchor="middle" x="594.12" y="-290.45" font-family="Arial" font-size="10.00">Tails inbox; reads snapshots / view / evidence</text>
+</g>
+<!-- engine&#45;&gt;project -->
+<g id="edge8" class="edge">
+<title>engine&#45;&gt;project</title>
+<path fill="none" stroke="#53677b" d="M732.2,-184.19C801.48,-162.2 893.16,-130.47 971,-94.6 972.11,-94.09 973.23,-93.56 974.35,-93.02"/>
+<polygon fill="#53677b" stroke="#53677b" points="975.79,-96.22 983.16,-88.61 972.65,-89.96 975.79,-96.22"/>
+<text xml:space="preserve" text-anchor="middle" x="953.52" y="-142.1" font-family="Arial" font-size="10.00">watchdog, git show, rg, pytest</text>
+<text xml:space="preserve" text-anchor="middle" x="953.52" y="-130.1" font-family="Arial" font-size="10.00">Saved content only</text>
+</g>
+<!-- engine&#45;&gt;model -->
+<g id="edge9" class="edge">
+<title>engine&#45;&gt;model</title>
+<path fill="none" stroke="#53677b" d="M746.71,-206.44C828.22,-197.77 937.41,-181.49 1030,-151.6 1074.59,-137.2 1121.65,-113.51 1157.66,-93.34"/>
+<polygon fill="#53677b" stroke="#53677b" points="1159.22,-96.48 1166.19,-88.51 1155.77,-90.39 1159.22,-96.48"/>
+<text xml:space="preserve" text-anchor="middle" x="1150.12" y="-136.1" font-family="Arial" font-size="10.00">Optional suggestion request</text>
+</g>
+<!-- engine&#45;&gt;state -->
+<g id="edge4" class="edge">
+<title>engine&#45;&gt;state</title>
+<path fill="none" stroke="#53677b" d="M679.41,-249.28C699.79,-265.44 715.28,-285.9 702,-305.95 689,-325.58 670.53,-340.74 649.96,-352.45"/>
+<polygon fill="#53677b" stroke="#53677b" points="648.55,-349.24 641.38,-357.05 651.85,-355.41 648.55,-349.24"/>
+<text xml:space="preserve" text-anchor="middle" x="809.69" y="-296.45" font-family="Arial" font-size="10.00">Writes events, snapshots, view.json, evidence,</text>
+<text xml:space="preserve" text-anchor="middle" x="809.69" y="-284.45" font-family="Arial" font-size="10.00">state.json, board.md, quickfix.txt</text>
+</g>
+<!-- returns -->
+<g id="node7" class="node">
+<title>returns</title>
+<path fill="#e9eff5" stroke="#62758a" d="M260.52,-94.6C260.52,-94.6 61.47,-94.6 61.47,-94.6 55.47,-94.6 49.47,-88.6 49.47,-82.6 49.47,-82.6 49.47,-28 49.47,-28 49.47,-22 55.47,-16 61.47,-16 61.47,-16 260.52,-16 260.52,-16 266.52,-16 272.52,-22 272.52,-28 272.52,-28 272.52,-82.6 272.52,-82.6 272.52,-88.6 266.52,-94.6 260.52,-94.6"/>
+<text xml:space="preserve" text-anchor="middle" x="161" y="-72.4" font-family="Arial" font-size="12.00">Return channel</text>
+<text xml:space="preserve" text-anchor="middle" x="161" y="-58.15" font-family="Arial" font-size="12.00">[Files in workspace state]</text>
+<text xml:space="preserve" text-anchor="middle" x="161" y="-43.9" font-family="Arial" font-size="12.00">findings.jsonl · engine.json</text>
+<text xml:space="preserve" text-anchor="middle" x="161" y="-29.65" font-family="Arial" font-size="12.00">Rewritten whole, renamed into place</text>
+</g>
+<!-- engine&#45;&gt;returns -->
+<g id="edge5" class="edge">
+<title>engine&#45;&gt;returns</title>
+<path fill="none" stroke="#53677b" d="M533.85,-184.17C462.02,-159.54 361.61,-125.1 283.09,-98.17"/>
+<polygon fill="#53677b" stroke="#53677b" points="284.68,-95.02 274.08,-95.08 282.41,-101.64 284.68,-95.02"/>
+<text xml:space="preserve" text-anchor="middle" x="489.52" y="-136.1" font-family="Arial" font-size="10.00">Atomic whole&#45;file publish</text>
+</g>
+<!-- outbox -->
+<g id="node8" class="node">
+<title>outbox</title>
+<path fill="#fff0d2" stroke="#ad6800" stroke-dasharray="5,2" d="M736.4,-80.35C736.4,-80.35 467.6,-80.35 467.6,-80.35 461.6,-80.35 455.6,-74.35 455.6,-68.35 455.6,-68.35 455.6,-42.25 455.6,-42.25 455.6,-36.25 461.6,-30.25 467.6,-30.25 467.6,-30.25 736.4,-30.25 736.4,-30.25 742.4,-30.25 748.4,-36.25 748.4,-42.25 748.4,-42.25 748.4,-68.35 748.4,-68.35 748.4,-74.35 742.4,-80.35 736.4,-80.35"/>
+<text xml:space="preserve" text-anchor="middle" x="602" y="-58.15" font-family="Arial" font-size="12.00">outbox.jsonl · NO WRITER YET</text>
+<text xml:space="preserve" text-anchor="middle" x="602" y="-43.9" font-family="Arial" font-size="12.00">[Planned: engine asks the editor for LSP answers]</text>
+</g>
+<!-- engine&#45;&gt;outbox -->
+<g id="edge10" class="edge">
+<title>engine&#45;&gt;outbox</title>
+<path fill="none" stroke="#ad6800" stroke-dasharray="5,2" d="M621.26,-184.27C617.25,-157.66 611.52,-119.57 607.35,-91.88"/>
+<polygon fill="#ad6800" stroke="#ad6800" points="610.85,-91.57 605.9,-82.2 603.93,-92.61 610.85,-91.57"/>
+<text xml:space="preserve" text-anchor="middle" x="645.4" y="-136.1" font-family="Arial" font-size="10.00">Contract only</text>
+</g>
+<!-- returns&#45;&gt;adapter -->
+<g id="edge6" class="edge">
+<title>returns&#45;&gt;adapter</title>
+<path fill="none" stroke="#53677b" d="M126.14,-94.95C86.81,-143.43 31.41,-229.49 56.75,-305.95 86.79,-396.61 161.7,-481.39 209.51,-528.85"/>
+<polygon fill="#53677b" stroke="#53677b" points="206.85,-531.15 216.44,-535.65 211.75,-526.15 206.85,-531.15"/>
+<text xml:space="preserve" text-anchor="middle" x="125.38" y="-290.45" font-family="Arial" font-size="10.00">Polled by mtime; panel redraws</text>
+</g>
+<!-- outbox&#45;&gt;adapter -->
+<g id="edge11" class="edge">
+<title>outbox&#45;&gt;adapter</title>
+<path fill="none" stroke="#ad6800" stroke-dasharray="5,2" d="M462.18,-80.78C429.25,-91.28 395.94,-106.26 369,-127.6 246.4,-224.72 243.36,-434.47 248.35,-525.07"/>
+<polygon fill="#ad6800" stroke="#ad6800" points="244.86,-525.26 248.97,-535.02 251.84,-524.83 244.86,-525.26"/>
+<text xml:space="preserve" text-anchor="middle" x="369.82" y="-290.45" font-family="Arial" font-size="10.00">Reader exists; engine has nothing to ask yet</text>
+</g>
+</g>
+</svg>

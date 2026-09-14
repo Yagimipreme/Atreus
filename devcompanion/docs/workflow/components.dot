@@ -1,0 +1,47 @@
+digraph components {
+  graph [rankdir=TB, bgcolor="transparent", pad=.3, nodesep=.5, ranksep=.65, fontname="Arial", label="C4 · Level 3 · Engine components", labelloc=t, fontsize=22];
+  node [shape=box, style="rounded,filled", fillcolor="#e2f2f2", color="#207b85", fontname="Arial", fontsize=12, margin=".2,.15"];
+  edge [fontname="Arial", fontsize=10, color="#53677b"];
+  inputs [label="Filesystem / Neovim inbox / CLI / recording\n[External inputs to engine]", fillcolor="#e9eff5"];
+  files [label="Workspace state\n[External data store: .companion/]\nObjects + history + events + view + evidence + board", shape=cylinder, fillcolor="#e9eff5"];
+  editor [label="Neovim adapter\n[External: reads the published files]", fillcolor="#e9eff5"];
+  tools [label="Target project + optional model server\n[External systems]\nGit / rg / pytest / HTTP", fillcolor="#e9eff5"];
+  subgraph cluster_engine {
+    label="Engine · Python container boundary (nodes are Python components)"; color="#207b85"; style=rounded;
+    cli [label="CLI and producers\ncli.py · observe/\nwatch / ingest / replay"];
+    canon [label="Canonical text\ncanon.py\nThe hashing rule both halves obey"];
+    engine [label="Engine orchestrator\nengine.py\nResolve content and origin; route events and bundles"];
+    snapshot [label="Snapshot store\nsnapshot/store.py\nSHA objects; origin-tagged history; lazy HEAD baseline"];
+    view [label="Content view\nview/index.py\nDisk revision vs editor overlay;\neffective revision; analysis manifest"];
+    scheduler [label="Scheduler\nschedule/queue.py\n400 ms debounce; coalesce per path; carries origin"];
+    detect [label="Change detector\nschedule/detect.py\nPython tree-sitter signatures"];
+    investigate [label="Investigators\ninvestigate/callers.py · tests.py\nJudge callers over effective revisions;\nrun pytest against saved files only"];
+    llm [label="Suggestion client\nllm/client.py\nOptional sentence; errors yield no suggestion"];
+    evidence [label="Evidence store\nevidence/store.py\nDependencies; fingerprints; stale status"];
+    board [label="Board presenter\npresent/board.py\nMarkdown board + quickfix output"];
+    publish [label="Editor presenters\npresent/findings.py · status.py\nEvidence to findings; engine liveness\nAtomic whole-file rewrite"];
+  }
+  inputs -> cli [label="Events / recorded objects"];
+  cli -> engine [label="handle_event"];
+  engine -> canon [label="Verify declared text_sha"];
+  engine -> snapshot [label="Store bytes with origin"];
+  engine -> view [label="Record overlay or disk revision"];
+  view -> snapshot [label="Effective revision lookup"];
+  engine -> scheduler [label="Submit path + origin; requeue dependents"];
+  scheduler -> engine [label="Invoke _run_bundle"];
+  engine -> detect [label="Baseline + current content"];
+  engine -> investigate [label="Dispatch detected tasks"];
+  investigate -> view [label="Read effective content"];
+  investigate -> tools [label="Search callers / execute tests"];
+  engine -> llm [label="Only with breaking call sites + model"];
+  llm -> tools [label="HTTP request"];
+  engine -> evidence [label="Persist results; mark stale on changes"];
+  engine -> board [label="Render after bundle"];
+  engine -> publish [label="Publish after every change of state"];
+  snapshot -> files [label="Objects / history"];
+  view -> files [label="view.json"];
+  evidence -> files [label="evidence.jsonl / state.json"];
+  board -> files [label="board.md / quickfix.txt"];
+  publish -> files [label="findings.jsonl / engine.json"];
+  files -> editor [label="Polled by mtime"];
+}

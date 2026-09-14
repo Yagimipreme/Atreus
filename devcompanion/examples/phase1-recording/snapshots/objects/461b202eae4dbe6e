@@ -1,0 +1,2 @@
+def scale(values, factor=1
+    return values

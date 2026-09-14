@@ -1,0 +1,781 @@
+<?xml version='1.0' encoding='utf-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_devcompanion" targetNamespace="urn:devcompanion:workflow" exporter="devcompanion workflow documentation" exporterVersion="1">
+  <bpmn:process id="intake" name="BPMN 2.0 · Event intake" isExecutable="false">
+    <bpmn:documentation>Scope: accepted engine Event under contract v2, not all contract messages. The editor sends canonical buffer text; the engine recomputes its hash rather than trusting the declared one, reports a mismatch, and uses the bytes that arrived. Origin decides everything downstream: editor content exists only in a buffer, disk content is what shelling-out tools can see. A save that changes no bytes still passes through scheduling, because the same content becoming visible to pytest and rg is news. Scheduling submission is asynchronous in watch; it is not a BPMN sequence flow into the worker process.</bpmn:documentation>
+    <bpmn:startEvent id="i_start" name="Event received">
+      <bpmn:outgoing>intake_flow_0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:exclusiveGateway id="i_session" name="Session event? goal / dismiss / request / lsp_result / session_end">
+      <bpmn:incoming>intake_flow_0</bpmn:incoming>
+      <bpmn:outgoing>intake_flow_1</bpmn:outgoing>
+      <bpmn:outgoing>intake_flow_3</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="i_session_do" name="Record it; session_end drops that editor's overlays and requeues those paths">
+      <bpmn:incoming>intake_flow_1</bpmn:incoming>
+      <bpmn:outgoing>intake_flow_2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="i_session_end" name="Published; no file analysis">
+      <bpmn:incoming>intake_flow_2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="i_light" name="Cursor or diagnostics?">
+      <bpmn:incoming>intake_flow_3</bpmn:incoming>
+      <bpmn:outgoing>intake_flow_4</bpmn:outgoing>
+      <bpmn:outgoing>intake_flow_6</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="i_light_do" name="Append event; store diagnostics for republication">
+      <bpmn:incoming>intake_flow_4</bpmn:incoming>
+      <bpmn:outgoing>intake_flow_5</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="i_light_end" name="No investigation">
+      <bpmn:incoming>intake_flow_5</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="i_content" name="Resolve content: editor text (hash verified) → recorded SHA → disk. Origin is editor when the buffer is dirty">
+      <bpmn:incoming>intake_flow_6</bpmn:incoming>
+      <bpmn:outgoing>intake_flow_7</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="i_missing" name="Content missing?">
+      <bpmn:incoming>intake_flow_7</bpmn:incoming>
+      <bpmn:outgoing>intake_flow_8</bpmn:outgoing>
+      <bpmn:outgoing>intake_flow_10</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="i_delete" name="Log file_deleted; forget any overlay">
+      <bpmn:incoming>intake_flow_8</bpmn:incoming>
+      <bpmn:outgoing>intake_flow_9</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="i_delete_end" name="Deletion handling stops">
+      <bpmn:incoming>intake_flow_9</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="i_snap" name="Seed Git HEAD baseline on first live sight; snapshot with origin; record overlay or disk revision; log without text">
+      <bpmn:incoming>intake_flow_10</bpmn:incoming>
+      <bpmn:outgoing>intake_flow_11</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="i_same" name="Same bytes AND same origin?">
+      <bpmn:incoming>intake_flow_11</bpmn:incoming>
+      <bpmn:outgoing>intake_flow_12</bpmn:outgoing>
+      <bpmn:outgoing>intake_flow_13</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="i_same_end" name="No work">
+      <bpmn:incoming>intake_flow_12</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="i_queue" name="Submit path, SHA and origin to scheduler">
+      <bpmn:incoming>intake_flow_13</bpmn:incoming>
+      <bpmn:outgoing>intake_flow_14</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="i_changed" name="Bytes actually changed?">
+      <bpmn:incoming>intake_flow_14</bpmn:incoming>
+      <bpmn:outgoing>intake_flow_15</bpmn:outgoing>
+      <bpmn:outgoing>intake_flow_16</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="i_saved_end" name="Save of already-analysed bytes; tools rerun, nothing invalidated">
+      <bpmn:incoming>intake_flow_15</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="i_stale" name="Mark dependent claims stale and requeue their defining files">
+      <bpmn:incoming>intake_flow_16</bpmn:incoming>
+      <bpmn:outgoing>intake_flow_17</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="i_new" name="Requeue any claim whose callee this file now names but never depended on">
+      <bpmn:incoming>intake_flow_17</bpmn:incoming>
+      <bpmn:outgoing>intake_flow_18</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="i_end" name="Event handled; worker runs separately">
+      <bpmn:incoming>intake_flow_18</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="intake_flow_0" sourceRef="i_start" targetRef="i_session" name="" />
+    <bpmn:sequenceFlow id="intake_flow_1" sourceRef="i_session" targetRef="i_session_do" name="yes" />
+    <bpmn:sequenceFlow id="intake_flow_2" sourceRef="i_session_do" targetRef="i_session_end" name="" />
+    <bpmn:sequenceFlow id="intake_flow_3" sourceRef="i_session" targetRef="i_light" name="no" />
+    <bpmn:sequenceFlow id="intake_flow_4" sourceRef="i_light" targetRef="i_light_do" name="yes" />
+    <bpmn:sequenceFlow id="intake_flow_5" sourceRef="i_light_do" targetRef="i_light_end" name="" />
+    <bpmn:sequenceFlow id="intake_flow_6" sourceRef="i_light" targetRef="i_content" name="no" />
+    <bpmn:sequenceFlow id="intake_flow_7" sourceRef="i_content" targetRef="i_missing" name="" />
+    <bpmn:sequenceFlow id="intake_flow_8" sourceRef="i_missing" targetRef="i_delete" name="yes" />
+    <bpmn:sequenceFlow id="intake_flow_9" sourceRef="i_delete" targetRef="i_delete_end" name="" />
+    <bpmn:sequenceFlow id="intake_flow_10" sourceRef="i_missing" targetRef="i_snap" name="no" />
+    <bpmn:sequenceFlow id="intake_flow_11" sourceRef="i_snap" targetRef="i_same" name="" />
+    <bpmn:sequenceFlow id="intake_flow_12" sourceRef="i_same" targetRef="i_same_end" name="yes" />
+    <bpmn:sequenceFlow id="intake_flow_13" sourceRef="i_same" targetRef="i_queue" name="no" />
+    <bpmn:sequenceFlow id="intake_flow_14" sourceRef="i_queue" targetRef="i_changed" name="" />
+    <bpmn:sequenceFlow id="intake_flow_15" sourceRef="i_changed" targetRef="i_saved_end" name="no" />
+    <bpmn:sequenceFlow id="intake_flow_16" sourceRef="i_changed" targetRef="i_stale" name="yes" />
+    <bpmn:sequenceFlow id="intake_flow_17" sourceRef="i_stale" targetRef="i_new" name="" />
+    <bpmn:sequenceFlow id="intake_flow_18" sourceRef="i_new" targetRef="i_end" name="" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="intake_diagram" name="BPMN 2.0 · Event intake">
+    <bpmndi:BPMNPlane id="intake_plane" bpmnElement="intake">
+      <bpmndi:BPMNEdge id="intake_flow_0_di" bpmnElement="intake_flow_0">
+        <di:waypoint x="450.0" y="69" />
+        <di:waypoint x="450.0" y="110" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_1_di" bpmnElement="intake_flow_1">
+        <di:waypoint x="482" y="142.0" />
+        <di:waypoint x="700" y="142.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="598.0" y="121.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_2_di" bpmnElement="intake_flow_2">
+        <di:waypoint x="835.0" y="180" />
+        <di:waypoint x="835.0" y="225" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_3_di" bpmnElement="intake_flow_3">
+        <di:waypoint x="450.0" y="174" />
+        <di:waypoint x="450.0" y="250" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="457.0" y="191.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_4_di" bpmnElement="intake_flow_4">
+        <di:waypoint x="482" y="282.0" />
+        <di:waypoint x="700" y="282.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="598.0" y="261.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_5_di" bpmnElement="intake_flow_5">
+        <di:waypoint x="835.0" y="320" />
+        <di:waypoint x="835.0" y="365" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_6_di" bpmnElement="intake_flow_6">
+        <di:waypoint x="450.0" y="314" />
+        <di:waypoint x="450.0" y="390" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="457.0" y="331.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_7_di" bpmnElement="intake_flow_7">
+        <di:waypoint x="450.0" y="466" />
+        <di:waypoint x="450.0" y="530" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_8_di" bpmnElement="intake_flow_8">
+        <di:waypoint x="482" y="562.0" />
+        <di:waypoint x="700" y="562.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="598.0" y="541.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_9_di" bpmnElement="intake_flow_9">
+        <di:waypoint x="835.0" y="600" />
+        <di:waypoint x="835.0" y="640" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_10_di" bpmnElement="intake_flow_10">
+        <di:waypoint x="450.0" y="594" />
+        <di:waypoint x="450.0" y="660" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="457.0" y="606.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_11_di" bpmnElement="intake_flow_11">
+        <di:waypoint x="450.0" y="736" />
+        <di:waypoint x="450.0" y="810" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_12_di" bpmnElement="intake_flow_12">
+        <di:waypoint x="482" y="842.0" />
+        <di:waypoint x="813" y="842.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="654.5" y="821.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_13_di" bpmnElement="intake_flow_13">
+        <di:waypoint x="450.0" y="874" />
+        <di:waypoint x="450.0" y="940" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="457.0" y="886.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_14_di" bpmnElement="intake_flow_14">
+        <di:waypoint x="450.0" y="1016" />
+        <di:waypoint x="450.0" y="1080" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_15_di" bpmnElement="intake_flow_15">
+        <di:waypoint x="482" y="1112.0" />
+        <di:waypoint x="813" y="1112.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="654.5" y="1091.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_16_di" bpmnElement="intake_flow_16">
+        <di:waypoint x="450.0" y="1144" />
+        <di:waypoint x="450.0" y="1210" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="457.0" y="1156.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_17_di" bpmnElement="intake_flow_17">
+        <di:waypoint x="450.0" y="1286" />
+        <di:waypoint x="450.0" y="1350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="intake_flow_18_di" bpmnElement="intake_flow_18">
+        <di:waypoint x="450.0" y="1426" />
+        <di:waypoint x="450.0" y="1490" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="i_start_di" bpmnElement="i_start">
+        <dc:Bounds x="428" y="25" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="198" y="25" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_session_di" bpmnElement="i_session" isMarkerVisible="true">
+        <dc:Bounds x="418" y="110" width="64" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="188" y="110" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_session_do_di" bpmnElement="i_session_do">
+        <dc:Bounds x="700" y="104" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_session_end_di" bpmnElement="i_session_end">
+        <dc:Bounds x="813" y="225" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="583" y="225" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_light_di" bpmnElement="i_light" isMarkerVisible="true">
+        <dc:Bounds x="418" y="250" width="64" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="188" y="250" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_light_do_di" bpmnElement="i_light_do">
+        <dc:Bounds x="700" y="244" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_light_end_di" bpmnElement="i_light_end">
+        <dc:Bounds x="813" y="365" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="583" y="365" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_content_di" bpmnElement="i_content">
+        <dc:Bounds x="315" y="390" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_missing_di" bpmnElement="i_missing" isMarkerVisible="true">
+        <dc:Bounds x="418" y="530" width="64" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="188" y="530" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_delete_di" bpmnElement="i_delete">
+        <dc:Bounds x="700" y="524" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_delete_end_di" bpmnElement="i_delete_end">
+        <dc:Bounds x="813" y="640" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="583" y="640" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_snap_di" bpmnElement="i_snap">
+        <dc:Bounds x="315" y="660" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_same_di" bpmnElement="i_same" isMarkerVisible="true">
+        <dc:Bounds x="418" y="810" width="64" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="188" y="810" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_same_end_di" bpmnElement="i_same_end">
+        <dc:Bounds x="813" y="820" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="583" y="820" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_queue_di" bpmnElement="i_queue">
+        <dc:Bounds x="315" y="940" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_changed_di" bpmnElement="i_changed" isMarkerVisible="true">
+        <dc:Bounds x="418" y="1080" width="64" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="188" y="1080" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_saved_end_di" bpmnElement="i_saved_end">
+        <dc:Bounds x="813" y="1090" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="583" y="1090" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_stale_di" bpmnElement="i_stale">
+        <dc:Bounds x="315" y="1210" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_new_di" bpmnElement="i_new">
+        <dc:Bounds x="315" y="1350" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="i_end_di" bpmnElement="i_end">
+        <dc:Bounds x="428" y="1490" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="198" y="1490" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+  <bpmn:process id="bundle" name="BPMN 2.0 · Scheduled investigation bundle" isExecutable="false">
+    <bpmn:documentation>One scheduler worker. The 400 ms debounce is reset per submitted path; ingest/replay drain immediately. The baseline choice is the difference between useful and noisy: an unsaved buffer is compared against the last save, so an edit typed across several debounce windows reads as one change. Tests run after all tasks, once per bundle, and only for content that is on disk — pytest imports the working tree and cannot see a buffer. Test results include passed, failed, none, unavailable and timeout. No parallel gateway: tests and suggestions execute synchronously in this worker.</bpmn:documentation>
+    <bpmn:startEvent id="b_start" name="Path bundle pending">
+      <bpmn:outgoing>bundle_flow_0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="b_wait" name="Wait until debounce due; newer submission replaces pending bundle">
+      <bpmn:incoming>bundle_flow_0</bpmn:incoming>
+      <bpmn:outgoing>bundle_flow_1</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="b_base" name="Content came from the editor?">
+      <bpmn:incoming>bundle_flow_1</bpmn:incoming>
+      <bpmn:outgoing>bundle_flow_2</bpmn:outgoing>
+      <bpmn:outgoing>bundle_flow_3</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="b_base_e" name="Baseline is the last saved content: one edit, not a stream of drafts">
+      <bpmn:incoming>bundle_flow_2</bpmn:incoming>
+      <bpmn:outgoing>bundle_flow_4</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="b_base_d" name="Baseline is the previous saved content">
+      <bpmn:incoming>bundle_flow_3</bpmn:incoming>
+      <bpmn:outgoing>bundle_flow_5</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="b_detect" name="Record superseded bundles; compare baseline and current">
+      <bpmn:incoming>bundle_flow_4</bpmn:incoming>
+      <bpmn:incoming>bundle_flow_5</bpmn:incoming>
+      <bpmn:outgoing>bundle_flow_6</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="b_tasks" name="For each detected task, run investigation process below; store evidence">
+      <bpmn:incoming>bundle_flow_6</bpmn:incoming>
+      <bpmn:outgoing>bundle_flow_7</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="b_tests" name="Changed/removed names AND tests enabled AND content is on disk?">
+      <bpmn:incoming>bundle_flow_7</bpmn:incoming>
+      <bpmn:outgoing>bundle_flow_8</bpmn:outgoing>
+      <bpmn:outgoing>bundle_flow_9</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="b_no" name="No test run; unsaved content is not something pytest can import">
+      <bpmn:incoming>bundle_flow_8</bpmn:incoming>
+      <bpmn:outgoing>bundle_flow_10</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="b_replay" name="Replay mode?">
+      <bpmn:incoming>bundle_flow_9</bpmn:incoming>
+      <bpmn:outgoing>bundle_flow_11</bpmn:outgoing>
+      <bpmn:outgoing>bundle_flow_12</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="b_skip" name="Record skipped: replay never executes tests">
+      <bpmn:incoming>bundle_flow_11</bpmn:incoming>
+      <bpmn:outgoing>bundle_flow_13</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="b_run" name="Run pytest -q -x on files mentioning names; label evidence saved-revision-only and name uncovered buffers">
+      <bpmn:incoming>bundle_flow_12</bpmn:incoming>
+      <bpmn:outgoing>bundle_flow_14</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="b_merge" name="">
+      <bpmn:incoming>bundle_flow_10</bpmn:incoming>
+      <bpmn:incoming>bundle_flow_13</bpmn:incoming>
+      <bpmn:incoming>bundle_flow_14</bpmn:incoming>
+      <bpmn:outgoing>bundle_flow_15</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="b_present" name="Write board.md + quickfix.txt; publish findings.jsonl + engine.json atomically; record timings">
+      <bpmn:incoming>bundle_flow_15</bpmn:incoming>
+      <bpmn:outgoing>bundle_flow_16</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="b_end" name="Results ready for voluntary reading">
+      <bpmn:incoming>bundle_flow_16</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="bundle_flow_0" sourceRef="b_start" targetRef="b_wait" name="" />
+    <bpmn:sequenceFlow id="bundle_flow_1" sourceRef="b_wait" targetRef="b_base" name="" />
+    <bpmn:sequenceFlow id="bundle_flow_2" sourceRef="b_base" targetRef="b_base_e" name="yes" />
+    <bpmn:sequenceFlow id="bundle_flow_3" sourceRef="b_base" targetRef="b_base_d" name="no" />
+    <bpmn:sequenceFlow id="bundle_flow_4" sourceRef="b_base_e" targetRef="b_detect" name="" />
+    <bpmn:sequenceFlow id="bundle_flow_5" sourceRef="b_base_d" targetRef="b_detect" name="" />
+    <bpmn:sequenceFlow id="bundle_flow_6" sourceRef="b_detect" targetRef="b_tasks" name="" />
+    <bpmn:sequenceFlow id="bundle_flow_7" sourceRef="b_tasks" targetRef="b_tests" name="" />
+    <bpmn:sequenceFlow id="bundle_flow_8" sourceRef="b_tests" targetRef="b_no" name="no" />
+    <bpmn:sequenceFlow id="bundle_flow_9" sourceRef="b_tests" targetRef="b_replay" name="yes" />
+    <bpmn:sequenceFlow id="bundle_flow_10" sourceRef="b_no" targetRef="b_merge" name="" />
+    <bpmn:sequenceFlow id="bundle_flow_11" sourceRef="b_replay" targetRef="b_skip" name="yes" />
+    <bpmn:sequenceFlow id="bundle_flow_12" sourceRef="b_replay" targetRef="b_run" name="no" />
+    <bpmn:sequenceFlow id="bundle_flow_13" sourceRef="b_skip" targetRef="b_merge" name="" />
+    <bpmn:sequenceFlow id="bundle_flow_14" sourceRef="b_run" targetRef="b_merge" name="" />
+    <bpmn:sequenceFlow id="bundle_flow_15" sourceRef="b_merge" targetRef="b_present" name="" />
+    <bpmn:sequenceFlow id="bundle_flow_16" sourceRef="b_present" targetRef="b_end" name="" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="bundle_diagram" name="BPMN 2.0 · Scheduled investigation bundle">
+    <bpmndi:BPMNPlane id="bundle_plane" bpmnElement="bundle">
+      <bpmndi:BPMNEdge id="bundle_flow_0_di" bpmnElement="bundle_flow_0">
+        <di:waypoint x="450.0" y="69" />
+        <di:waypoint x="450.0" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bundle_flow_1_di" bpmnElement="bundle_flow_1">
+        <di:waypoint x="450.0" y="196" />
+        <di:waypoint x="450.0" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bundle_flow_2_di" bpmnElement="bundle_flow_2">
+        <di:waypoint x="482" y="292.0" />
+        <di:waypoint x="700" y="292.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="598.0" y="271.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bundle_flow_3_di" bpmnElement="bundle_flow_3">
+        <di:waypoint x="418" y="292.0" />
+        <di:waypoint x="330" y="292.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="381.0" y="271.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bundle_flow_4_di" bpmnElement="bundle_flow_4">
+        <di:waypoint x="835.0" y="330" />
+        <di:waypoint x="835.0" y="438.0" />
+        <di:waypoint x="585" y="438.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bundle_flow_5_di" bpmnElement="bundle_flow_5">
+        <di:waypoint x="330" y="292.0" />
+        <di:waypoint x="450.0" y="292.0" />
+        <di:waypoint x="450.0" y="400" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bundle_flow_6_di" bpmnElement="bundle_flow_6">
+        <di:waypoint x="450.0" y="476" />
+        <di:waypoint x="450.0" y="540" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bundle_flow_7_di" bpmnElement="bundle_flow_7">
+        <di:waypoint x="450.0" y="616" />
+        <di:waypoint x="450.0" y="690" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bundle_flow_8_di" bpmnElement="bundle_flow_8">
+        <di:waypoint x="482" y="722.0" />
+        <di:waypoint x="700" y="722.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="598.0" y="701.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bundle_flow_9_di" bpmnElement="bundle_flow_9">
+        <di:waypoint x="450.0" y="754" />
+        <di:waypoint x="450.0" y="830" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="457.0" y="771.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bundle_flow_10_di" bpmnElement="bundle_flow_10">
+        <di:waypoint x="970" y="722.0" />
+        <di:waypoint x="995" y="722.0" />
+        <di:waypoint x="995" y="1146" />
+        <di:waypoint x="466" y="1146" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bundle_flow_11_di" bpmnElement="bundle_flow_11">
+        <di:waypoint x="482" y="862.0" />
+        <di:waypoint x="700" y="862.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="598.0" y="841.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bundle_flow_12_di" bpmnElement="bundle_flow_12">
+        <di:waypoint x="450.0" y="894" />
+        <di:waypoint x="450.0" y="970" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="457.0" y="911.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bundle_flow_13_di" bpmnElement="bundle_flow_13">
+        <di:waypoint x="835.0" y="900" />
+        <di:waypoint x="835.0" y="1162.0" />
+        <di:waypoint x="482" y="1162.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bundle_flow_14_di" bpmnElement="bundle_flow_14">
+        <di:waypoint x="450.0" y="1046" />
+        <di:waypoint x="450.0" y="1130" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bundle_flow_15_di" bpmnElement="bundle_flow_15">
+        <di:waypoint x="450.0" y="1194" />
+        <di:waypoint x="450.0" y="1270" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="bundle_flow_16_di" bpmnElement="bundle_flow_16">
+        <di:waypoint x="450.0" y="1346" />
+        <di:waypoint x="450.0" y="1420" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="b_start_di" bpmnElement="b_start">
+        <dc:Bounds x="428" y="25" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="198" y="25" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_wait_di" bpmnElement="b_wait">
+        <dc:Bounds x="315" y="120" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_base_di" bpmnElement="b_base" isMarkerVisible="true">
+        <dc:Bounds x="418" y="260" width="64" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="188" y="260" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_base_e_di" bpmnElement="b_base_e">
+        <dc:Bounds x="700" y="254" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_base_d_di" bpmnElement="b_base_d">
+        <dc:Bounds x="60" y="254" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_detect_di" bpmnElement="b_detect">
+        <dc:Bounds x="315" y="400" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_tasks_di" bpmnElement="b_tasks">
+        <dc:Bounds x="315" y="540" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_tests_di" bpmnElement="b_tests" isMarkerVisible="true">
+        <dc:Bounds x="418" y="690" width="64" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="188" y="690" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_no_di" bpmnElement="b_no">
+        <dc:Bounds x="700" y="684" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_replay_di" bpmnElement="b_replay" isMarkerVisible="true">
+        <dc:Bounds x="418" y="830" width="64" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="188" y="830" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_skip_di" bpmnElement="b_skip">
+        <dc:Bounds x="700" y="824" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_run_di" bpmnElement="b_run">
+        <dc:Bounds x="315" y="970" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_merge_di" bpmnElement="b_merge" isMarkerVisible="true">
+        <dc:Bounds x="418" y="1130" width="64" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="188" y="1130" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_present_di" bpmnElement="b_present">
+        <dc:Bounds x="315" y="1270" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_end_di" bpmnElement="b_end">
+        <dc:Bounds x="428" y="1420" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="198" y="1420" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+  <bpmn:process id="investigation" name="BPMN 2.0 · One detected task" isExecutable="false">
+    <bpmn:documentation>Detailed activity for each detected task, invoked by the bundle task. rg reads files, so a call typed a second ago is invisible to it; unsaved buffers are added to the candidate set and every candidate is then read at its effective revision. The fingerprint includes the revision label, so a claim that moves from buffer to saved file is an update rather than an unchanged record. The detector returns unknown_intent on current parse errors; noop on first observation, invalid previous baseline or no signature change. New functions do not generate tests. Model payload currently includes up to 12 sites regardless of verdict. No final freshness gate exists after model/test execution.</bpmn:documentation>
+    <bpmn:startEvent id="t_start" name="Detected task">
+      <bpmn:outgoing>investigation_flow_0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:exclusiveGateway id="t_kind" name="Signature change or removal?">
+      <bpmn:incoming>investigation_flow_0</bpmn:incoming>
+      <bpmn:outgoing>investigation_flow_1</bpmn:outgoing>
+      <bpmn:outgoing>investigation_flow_3</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t_status" name="Store noop, unknown_intent or new_function record">
+      <bpmn:incoming>investigation_flow_1</bpmn:incoming>
+      <bpmn:outgoing>investigation_flow_2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="t_status_end" name="Task complete">
+      <bpmn:incoming>investigation_flow_2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="t_cand" name="Candidates: rg over the working tree PLUS every unsaved buffer naming the callee">
+      <bpmn:incoming>investigation_flow_3</bpmn:incoming>
+      <bpmn:outgoing>investigation_flow_4</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="t_call" name="Read each candidate at its effective revision; tree-sitter judges the arguments">
+      <bpmn:incoming>investigation_flow_4</bpmn:incoming>
+      <bpmn:outgoing>investigation_flow_5</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="t_stale" name="Input stale during caller scan?">
+      <bpmn:incoming>investigation_flow_5</bpmn:incoming>
+      <bpmn:outgoing>investigation_flow_6</bpmn:outgoing>
+      <bpmn:outgoing>investigation_flow_8</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t_cancel" name="Store cancelled evidence">
+      <bpmn:incoming>investigation_flow_6</bpmn:incoming>
+      <bpmn:outgoing>investigation_flow_7</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="t_cancel_end" name="Task abandoned">
+      <bpmn:incoming>investigation_flow_7</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="t_removal" name="For removed functions, mark found sites breaks; build claim; label whether it rests on a buffer">
+      <bpmn:incoming>investigation_flow_8</bpmn:incoming>
+      <bpmn:outgoing>investigation_flow_9</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="t_model" name="Model configured AND breaking sites?">
+      <bpmn:incoming>investigation_flow_9</bpmn:incoming>
+      <bpmn:outgoing>investigation_flow_10</bpmn:outgoing>
+      <bpmn:outgoing>investigation_flow_11</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t_suggest" name="Request one sentence; failure gives no suggestion">
+      <bpmn:incoming>investigation_flow_10</bpmn:incoming>
+      <bpmn:outgoing>investigation_flow_12</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="t_merge" name="">
+      <bpmn:incoming>investigation_flow_11</bpmn:incoming>
+      <bpmn:incoming>investigation_flow_12</bpmn:incoming>
+      <bpmn:outgoing>investigation_flow_13</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="t_store" name="Store SHA dependencies and evidence; suppress identical fresh fingerprint">
+      <bpmn:incoming>investigation_flow_13</bpmn:incoming>
+      <bpmn:outgoing>investigation_flow_14</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="t_end" name="Return to bundle">
+      <bpmn:incoming>investigation_flow_14</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="investigation_flow_0" sourceRef="t_start" targetRef="t_kind" name="" />
+    <bpmn:sequenceFlow id="investigation_flow_1" sourceRef="t_kind" targetRef="t_status" name="no" />
+    <bpmn:sequenceFlow id="investigation_flow_2" sourceRef="t_status" targetRef="t_status_end" name="" />
+    <bpmn:sequenceFlow id="investigation_flow_3" sourceRef="t_kind" targetRef="t_cand" name="yes" />
+    <bpmn:sequenceFlow id="investigation_flow_4" sourceRef="t_cand" targetRef="t_call" name="" />
+    <bpmn:sequenceFlow id="investigation_flow_5" sourceRef="t_call" targetRef="t_stale" name="" />
+    <bpmn:sequenceFlow id="investigation_flow_6" sourceRef="t_stale" targetRef="t_cancel" name="yes" />
+    <bpmn:sequenceFlow id="investigation_flow_7" sourceRef="t_cancel" targetRef="t_cancel_end" name="" />
+    <bpmn:sequenceFlow id="investigation_flow_8" sourceRef="t_stale" targetRef="t_removal" name="no" />
+    <bpmn:sequenceFlow id="investigation_flow_9" sourceRef="t_removal" targetRef="t_model" name="" />
+    <bpmn:sequenceFlow id="investigation_flow_10" sourceRef="t_model" targetRef="t_suggest" name="yes" />
+    <bpmn:sequenceFlow id="investigation_flow_11" sourceRef="t_model" targetRef="t_merge" name="no" />
+    <bpmn:sequenceFlow id="investigation_flow_12" sourceRef="t_suggest" targetRef="t_merge" name="" />
+    <bpmn:sequenceFlow id="investigation_flow_13" sourceRef="t_merge" targetRef="t_store" name="" />
+    <bpmn:sequenceFlow id="investigation_flow_14" sourceRef="t_store" targetRef="t_end" name="" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="investigation_diagram" name="BPMN 2.0 · One detected task">
+    <bpmndi:BPMNPlane id="investigation_plane" bpmnElement="investigation">
+      <bpmndi:BPMNEdge id="investigation_flow_0_di" bpmnElement="investigation_flow_0">
+        <di:waypoint x="450.0" y="69" />
+        <di:waypoint x="450.0" y="130" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="investigation_flow_1_di" bpmnElement="investigation_flow_1">
+        <di:waypoint x="482" y="162.0" />
+        <di:waypoint x="700" y="162.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="598.0" y="141.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="investigation_flow_2_di" bpmnElement="investigation_flow_2">
+        <di:waypoint x="835.0" y="200" />
+        <di:waypoint x="835.0" y="235" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="investigation_flow_3_di" bpmnElement="investigation_flow_3">
+        <di:waypoint x="450.0" y="194" />
+        <di:waypoint x="450.0" y="265" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="457.0" y="208.5" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="investigation_flow_4_di" bpmnElement="investigation_flow_4">
+        <di:waypoint x="450.0" y="341" />
+        <di:waypoint x="450.0" y="410" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="investigation_flow_5_di" bpmnElement="investigation_flow_5">
+        <di:waypoint x="450.0" y="486" />
+        <di:waypoint x="450.0" y="555" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="investigation_flow_6_di" bpmnElement="investigation_flow_6">
+        <di:waypoint x="482" y="587.0" />
+        <di:waypoint x="700" y="587.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="598.0" y="566.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="investigation_flow_7_di" bpmnElement="investigation_flow_7">
+        <di:waypoint x="835.0" y="625" />
+        <di:waypoint x="835.0" y="665" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="investigation_flow_8_di" bpmnElement="investigation_flow_8">
+        <di:waypoint x="450.0" y="619" />
+        <di:waypoint x="450.0" y="695" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="457.0" y="636.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="investigation_flow_9_di" bpmnElement="investigation_flow_9">
+        <di:waypoint x="450.0" y="771" />
+        <di:waypoint x="450.0" y="845" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="investigation_flow_10_di" bpmnElement="investigation_flow_10">
+        <di:waypoint x="482" y="877.0" />
+        <di:waypoint x="700" y="877.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="598.0" y="856.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="investigation_flow_11_di" bpmnElement="investigation_flow_11">
+        <di:waypoint x="450.0" y="909" />
+        <di:waypoint x="450.0" y="985" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="457.0" y="926.0" width="140" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="investigation_flow_12_di" bpmnElement="investigation_flow_12">
+        <di:waypoint x="835.0" y="915" />
+        <di:waypoint x="835.0" y="1017.0" />
+        <di:waypoint x="482" y="1017.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="investigation_flow_13_di" bpmnElement="investigation_flow_13">
+        <di:waypoint x="450.0" y="1049" />
+        <di:waypoint x="450.0" y="1125" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="investigation_flow_14_di" bpmnElement="investigation_flow_14">
+        <di:waypoint x="450.0" y="1201" />
+        <di:waypoint x="450.0" y="1265" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="t_start_di" bpmnElement="t_start">
+        <dc:Bounds x="428" y="25" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="198" y="25" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_kind_di" bpmnElement="t_kind" isMarkerVisible="true">
+        <dc:Bounds x="418" y="130" width="64" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="188" y="130" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_status_di" bpmnElement="t_status">
+        <dc:Bounds x="700" y="124" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_status_end_di" bpmnElement="t_status_end">
+        <dc:Bounds x="813" y="235" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="583" y="235" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_cand_di" bpmnElement="t_cand">
+        <dc:Bounds x="315" y="265" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_call_di" bpmnElement="t_call">
+        <dc:Bounds x="315" y="410" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_stale_di" bpmnElement="t_stale" isMarkerVisible="true">
+        <dc:Bounds x="418" y="555" width="64" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="188" y="555" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_cancel_di" bpmnElement="t_cancel">
+        <dc:Bounds x="700" y="549" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_cancel_end_di" bpmnElement="t_cancel_end">
+        <dc:Bounds x="813" y="665" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="583" y="665" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_removal_di" bpmnElement="t_removal">
+        <dc:Bounds x="315" y="695" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_model_di" bpmnElement="t_model" isMarkerVisible="true">
+        <dc:Bounds x="418" y="845" width="64" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="188" y="845" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_suggest_di" bpmnElement="t_suggest">
+        <dc:Bounds x="700" y="839" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_merge_di" bpmnElement="t_merge" isMarkerVisible="true">
+        <dc:Bounds x="418" y="985" width="64" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="188" y="985" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_store_di" bpmnElement="t_store">
+        <dc:Bounds x="315" y="1125" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_end_di" bpmnElement="t_end">
+        <dc:Bounds x="428" y="1265" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="198" y="1265" width="215" height="50" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

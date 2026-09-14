@@ -1,0 +1,177 @@
+<?xml version='1.0' encoding='utf-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="ProposedDefinitions" targetNamespace="urn:devcompanion:proposed">
+  <bpmn:process id="Feedback" name="Proposed effective-content feedback" isExecutable="false">
+    <bpmn:documentation>Proposed v2 design, not implemented. Starts after validated durable acceptance. Saved-test eligibility is independent of effective-content changes. Saved tests and optional model jobs execute separately and must pass equivalent final freshness gates. Queue/recovery details are in editor-feedback-design.md. This process describes logical sequencing; coordinator and worker run asynchronously.</bpmn:documentation>
+    <bpmn:startEvent id="start" name="Content event committed">
+      <bpmn:outgoing>f0</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="save" name="Reconcile disk / overlay; independently enqueue eligible saved tests">
+      <bpmn:incoming>f0</bpmn:incoming>
+      <bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="changed" name="Effective view changed?">
+      <bpmn:incoming>f1</bpmn:incoming>
+      <bpmn:outgoing>f2</bpmn:outgoing>
+      <bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="same_end" name="No structural work">
+      <bpmn:incoming>f2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="stale" name="Invalidate dependencies and publish outdated findings immediately">
+      <bpmn:incoming>f3</bpmn:incoming>
+      <bpmn:outgoing>f4</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="manifest" name="Debounce; capture immutable effective inputs and search generation">
+      <bpmn:incoming>f4</bpmn:incoming>
+      <bpmn:outgoing>f5</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="analyze" name="Analyze callers using disk + overlay candidates; return result">
+      <bpmn:incoming>f5</bpmn:incoming>
+      <bpmn:outgoing>f6</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="fresh" name="All inputs and search generation still current?">
+      <bpmn:incoming>f6</bpmn:incoming>
+      <bpmn:outgoing>f7</bpmn:outgoing>
+      <bpmn:outgoing>f9</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="discard" name="Discard obsolete result; persist latest job intent">
+      <bpmn:incoming>f7</bpmn:incoming>
+      <bpmn:outgoing>f8</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="discard_end" name="New work queued">
+      <bpmn:incoming>f8</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="commit" name="Commit evidence; remove resolved findings; publish complete set atomically">
+      <bpmn:incoming>f9</bpmn:incoming>
+      <bpmn:outgoing>f10</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="end" name="Ready for voluntary reading">
+      <bpmn:incoming>f10</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="f0" sourceRef="start" targetRef="save" name="" />
+    <bpmn:sequenceFlow id="f1" sourceRef="save" targetRef="changed" name="" />
+    <bpmn:sequenceFlow id="f2" sourceRef="changed" targetRef="same_end" name="no" />
+    <bpmn:sequenceFlow id="f3" sourceRef="changed" targetRef="stale" name="yes" />
+    <bpmn:sequenceFlow id="f4" sourceRef="stale" targetRef="manifest" name="" />
+    <bpmn:sequenceFlow id="f5" sourceRef="manifest" targetRef="analyze" name="" />
+    <bpmn:sequenceFlow id="f6" sourceRef="analyze" targetRef="fresh" name="" />
+    <bpmn:sequenceFlow id="f7" sourceRef="fresh" targetRef="discard" name="no" />
+    <bpmn:sequenceFlow id="f8" sourceRef="discard" targetRef="discard_end" name="" />
+    <bpmn:sequenceFlow id="f9" sourceRef="fresh" targetRef="commit" name="yes" />
+    <bpmn:sequenceFlow id="f10" sourceRef="commit" targetRef="end" name="" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="FeedbackDiagram">
+    <bpmndi:BPMNPlane id="FeedbackPlane" bpmnElement="Feedback">
+      <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0">
+        <di:waypoint x="450.0" y="74" />
+        <di:waypoint x="450.0" y="125" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1">
+        <di:waypoint x="450.0" y="201" />
+        <di:waypoint x="450.0" y="265" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2">
+        <di:waypoint x="482" y="297.0" />
+        <di:waypoint x="830" y="297.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="664.0" y="274.0" width="45" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3">
+        <di:waypoint x="450.0" y="329" />
+        <di:waypoint x="450.0" y="400" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="458.0" y="341.5" width="45" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4">
+        <di:waypoint x="450.0" y="476" />
+        <di:waypoint x="450.0" y="540" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5">
+        <di:waypoint x="450.0" y="616" />
+        <di:waypoint x="450.0" y="680" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6">
+        <di:waypoint x="450.0" y="756" />
+        <di:waypoint x="450.0" y="820" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f7_di" bpmnElement="f7">
+        <di:waypoint x="482" y="852.0" />
+        <di:waypoint x="715" y="852.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="606.5" y="829.0" width="45" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f8_di" bpmnElement="f8">
+        <di:waypoint x="850.0" y="890" />
+        <di:waypoint x="850.0" y="935" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f9_di" bpmnElement="f9">
+        <di:waypoint x="450.0" y="884" />
+        <di:waypoint x="450.0" y="970" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="458.0" y="904.0" width="45" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f10_di" bpmnElement="f10">
+        <di:waypoint x="450.0" y="1046" />
+        <di:waypoint x="450.0" y="1110" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <dc:Bounds x="428" y="30" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="183" y="30" width="230" height="60" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="save_di" bpmnElement="save">
+        <dc:Bounds x="315" y="125" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="changed_di" bpmnElement="changed" isMarkerVisible="true">
+        <dc:Bounds x="418" y="265" width="64" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="173" y="265" width="230" height="60" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="same_end_di" bpmnElement="same_end">
+        <dc:Bounds x="830" y="275" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="585" y="275" width="230" height="60" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="stale_di" bpmnElement="stale">
+        <dc:Bounds x="315" y="400" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="manifest_di" bpmnElement="manifest">
+        <dc:Bounds x="315" y="540" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="analyze_di" bpmnElement="analyze">
+        <dc:Bounds x="315" y="680" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="fresh_di" bpmnElement="fresh" isMarkerVisible="true">
+        <dc:Bounds x="418" y="820" width="64" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="173" y="820" width="230" height="60" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="discard_di" bpmnElement="discard">
+        <dc:Bounds x="715" y="814" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="discard_end_di" bpmnElement="discard_end">
+        <dc:Bounds x="828" y="935" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="583" y="935" width="230" height="60" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="commit_di" bpmnElement="commit">
+        <dc:Bounds x="315" y="970" width="270" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="end_di" bpmnElement="end">
+        <dc:Bounds x="428" y="1110" width="44" height="44" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="183" y="1110" width="230" height="60" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,0 +1,497 @@
+{
+  "model": "qwen3-coder:30b",
+  "timestamp": 1789380212.7269092,
+  "context_limit": 4096,
+  "output_limit": 60,
+  "temperature": 0,
+  "repeats": 3,
+  "remote_calls": false,
+  "rows": [
+    {
+      "repeat": 0,
+      "condition": "all_sites",
+      "case": "required_argument",
+      "payload": {
+        "change": "add(a, b) -> add(a, b, carry)",
+        "claim": "2 call site(s): 1 break, 0 unsure, 1 fit",
+        "sites": [
+          {
+            "where": "report.py:7",
+            "verdict": "ok",
+            "why": "arguments fit the new signature",
+            "code": "add(t, x, 0)"
+          },
+          {
+            "where": "tests/test_calc.py:7",
+            "verdict": "breaks",
+            "why": "missing required 'carry'",
+            "code": "add(1, 2)"
+          }
+        ]
+      },
+      "text": "Update `add(1, 2)` call in `tests/test_calc.py:7` to include the required `carry` parameter.",
+      "status": "ok",
+      "wall_s": 2.383986234664917,
+      "prompt_tokens": 171,
+      "gen_tokens": 29,
+      "prompt_s": 1.351691,
+      "gen_s": 1.01227,
+      "model": "qwen3-coder:30b",
+      "nonempty": true,
+      "mentions_expected_token": true,
+      "mentions_passing_file": false,
+      "word_count": 12
+    },
+    {
+      "repeat": 0,
+      "condition": "all_sites",
+      "case": "keyword_rename",
+      "payload": {
+        "change": "Ledger.post(self, amount, memo) -> Ledger.post(self, amount, note)",
+        "claim": "2 call site(s): 1 break, 0 unsure, 1 fit",
+        "sites": [
+          {
+            "where": "tests/test_ledger.py:8",
+            "verdict": "ok",
+            "why": "arguments fit the new signature",
+            "code": "ledger.post(5, note=\"x\")"
+          },
+          {
+            "where": "report.py:18",
+            "verdict": "breaks",
+            "why": "unknown keyword 'memo'",
+            "code": "ledger.post(a, memo=\"auto\")"
+          }
+        ]
+      },
+      "text": "Update report.py:18 to use 'note' instead of 'memo' keyword argument.",
+      "status": "ok",
+      "wall_s": 1.729177474975586,
+      "prompt_tokens": 180,
+      "gen_tokens": 20,
+      "prompt_s": 1.05539,
+      "gen_s": 0.660648,
+      "model": "qwen3-coder:30b",
+      "nonempty": true,
+      "mentions_expected_token": true,
+      "mentions_passing_file": false,
+      "word_count": 10
+    },
+    {
+      "repeat": 0,
+      "condition": "breaking_only",
+      "case": "required_argument",
+      "payload": {
+        "change": "add(a, b) -> add(a, b, carry)",
+        "claim": "1 call site(s): 1 break, 0 unsure, 0 fit",
+        "sites": [
+          {
+            "where": "tests/test_calc.py:7",
+            "verdict": "breaks",
+            "why": "missing required 'carry'",
+            "code": "add(1, 2)"
+          }
+        ]
+      },
+      "text": "Update the call site in tests/test_calc.py:7 to include the required 'carry' parameter.",
+      "status": "ok",
+      "wall_s": 1.5854086875915527,
+      "prompt_tokens": 132,
+      "gen_tokens": 21,
+      "prompt_s": 0.874354,
+      "gen_s": 0.697618,
+      "model": "qwen3-coder:30b",
+      "nonempty": true,
+      "mentions_expected_token": true,
+      "mentions_passing_file": false,
+      "word_count": 12
+    },
+    {
+      "repeat": 0,
+      "condition": "breaking_only",
+      "case": "keyword_rename",
+      "payload": {
+        "change": "Ledger.post(self, amount, memo) -> Ledger.post(self, amount, note)",
+        "claim": "1 call site(s): 1 break, 0 unsure, 0 fit",
+        "sites": [
+          {
+            "where": "report.py:18",
+            "verdict": "breaks",
+            "why": "unknown keyword 'memo'",
+            "code": "ledger.post(a, memo=\"auto\")"
+          }
+        ]
+      },
+      "text": "Update report.py line 18 from memo=\\\"auto\\\" to note=\\\"auto\\\" for Ledger.post() call.",
+      "status": "ok",
+      "wall_s": 1.6953985691070557,
+      "prompt_tokens": 137,
+      "gen_tokens": 24,
+      "prompt_s": 0.886482,
+      "gen_s": 0.79589,
+      "model": "qwen3-coder:30b",
+      "nonempty": true,
+      "mentions_expected_token": true,
+      "mentions_passing_file": false,
+      "word_count": 11
+    },
+    {
+      "repeat": 1,
+      "condition": "all_sites",
+      "case": "required_argument",
+      "payload": {
+        "change": "add(a, b) -> add(a, b, carry)",
+        "claim": "2 call site(s): 1 break, 0 unsure, 1 fit",
+        "sites": [
+          {
+            "where": "report.py:7",
+            "verdict": "ok",
+            "why": "arguments fit the new signature",
+            "code": "add(t, x, 0)"
+          },
+          {
+            "where": "tests/test_calc.py:7",
+            "verdict": "breaks",
+            "why": "missing required 'carry'",
+            "code": "add(1, 2)"
+          }
+        ]
+      },
+      "text": "Update `add(1, 2)` call in `tests/test_calc.py:7` to include the required `carry` parameter.",
+      "status": "ok",
+      "wall_s": 1.9772706031799316,
+      "prompt_tokens": 171,
+      "gen_tokens": 29,
+      "prompt_s": 0.981643,
+      "gen_s": 0.983816,
+      "model": "qwen3-coder:30b",
+      "nonempty": true,
+      "mentions_expected_token": true,
+      "mentions_passing_file": false,
+      "word_count": 12
+    },
+    {
+      "repeat": 1,
+      "condition": "all_sites",
+      "case": "keyword_rename",
+      "payload": {
+        "change": "Ledger.post(self, amount, memo) -> Ledger.post(self, amount, note)",
+        "claim": "2 call site(s): 1 break, 0 unsure, 1 fit",
+        "sites": [
+          {
+            "where": "tests/test_ledger.py:8",
+            "verdict": "ok",
+            "why": "arguments fit the new signature",
+            "code": "ledger.post(5, note=\"x\")"
+          },
+          {
+            "where": "report.py:18",
+            "verdict": "breaks",
+            "why": "unknown keyword 'memo'",
+            "code": "ledger.post(a, memo=\"auto\")"
+          }
+        ]
+      },
+      "text": "Update report.py:18 to use 'note' instead of 'memo' keyword argument.",
+      "status": "ok",
+      "wall_s": 1.6826870441436768,
+      "prompt_tokens": 180,
+      "gen_tokens": 20,
+      "prompt_s": 1.009109,
+      "gen_s": 0.660851,
+      "model": "qwen3-coder:30b",
+      "nonempty": true,
+      "mentions_expected_token": true,
+      "mentions_passing_file": false,
+      "word_count": 10
+    },
+    {
+      "repeat": 1,
+      "condition": "breaking_only",
+      "case": "required_argument",
+      "payload": {
+        "change": "add(a, b) -> add(a, b, carry)",
+        "claim": "1 call site(s): 1 break, 0 unsure, 0 fit",
+        "sites": [
+          {
+            "where": "tests/test_calc.py:7",
+            "verdict": "breaks",
+            "why": "missing required 'carry'",
+            "code": "add(1, 2)"
+          }
+        ]
+      },
+      "text": "Update the call site in tests/test_calc.py:7 to include the required 'carry' parameter.",
+      "status": "ok",
+      "wall_s": 1.5827233791351318,
+      "prompt_tokens": 132,
+      "gen_tokens": 21,
+      "prompt_s": 0.874555,
+      "gen_s": 0.695099,
+      "model": "qwen3-coder:30b",
+      "nonempty": true,
+      "mentions_expected_token": true,
+      "mentions_passing_file": false,
+      "word_count": 12
+    },
+    {
+      "repeat": 1,
+      "condition": "breaking_only",
+      "case": "keyword_rename",
+      "payload": {
+        "change": "Ledger.post(self, amount, memo) -> Ledger.post(self, amount, note)",
+        "claim": "1 call site(s): 1 break, 0 unsure, 0 fit",
+        "sites": [
+          {
+            "where": "report.py:18",
+            "verdict": "breaks",
+            "why": "unknown keyword 'memo'",
+            "code": "ledger.post(a, memo=\"auto\")"
+          }
+        ]
+      },
+      "text": "Update report.py line 18 from memo=\\\"auto\\\" to note=\\\"auto\\\" for Ledger.post() call.",
+      "status": "ok",
+      "wall_s": 1.739703893661499,
+      "prompt_tokens": 137,
+      "gen_tokens": 24,
+      "prompt_s": 0.87723,
+      "gen_s": 0.851014,
+      "model": "qwen3-coder:30b",
+      "nonempty": true,
+      "mentions_expected_token": true,
+      "mentions_passing_file": false,
+      "word_count": 11
+    },
+    {
+      "repeat": 2,
+      "condition": "all_sites",
+      "case": "required_argument",
+      "payload": {
+        "change": "add(a, b) -> add(a, b, carry)",
+        "claim": "2 call site(s): 1 break, 0 unsure, 1 fit",
+        "sites": [
+          {
+            "where": "report.py:7",
+            "verdict": "ok",
+            "why": "arguments fit the new signature",
+            "code": "add(t, x, 0)"
+          },
+          {
+            "where": "tests/test_calc.py:7",
+            "verdict": "breaks",
+            "why": "missing required 'carry'",
+            "code": "add(1, 2)"
+          }
+        ]
+      },
+      "text": "Update `add(1, 2)` call in `tests/test_calc.py:7` to include the required `carry` parameter.",
+      "status": "ok",
+      "wall_s": 2.0223793983459473,
+      "prompt_tokens": 171,
+      "gen_tokens": 29,
+      "prompt_s": 0.999349,
+      "gen_s": 1.010477,
+      "model": "qwen3-coder:30b",
+      "nonempty": true,
+      "mentions_expected_token": true,
+      "mentions_passing_file": false,
+      "word_count": 12
+    },
+    {
+      "repeat": 2,
+      "condition": "all_sites",
+      "case": "keyword_rename",
+      "payload": {
+        "change": "Ledger.post(self, amount, memo) -> Ledger.post(self, amount, note)",
+        "claim": "2 call site(s): 1 break, 0 unsure, 1 fit",
+        "sites": [
+          {
+            "where": "tests/test_ledger.py:8",
+            "verdict": "ok",
+            "why": "arguments fit the new signature",
+            "code": "ledger.post(5, note=\"x\")"
+          },
+          {
+            "where": "report.py:18",
+            "verdict": "breaks",
+            "why": "unknown keyword 'memo'",
+            "code": "ledger.post(a, memo=\"auto\")"
+          }
+        ]
+      },
+      "text": "Update report.py:18 to use 'note' instead of 'memo' keyword argument.",
+      "status": "ok",
+      "wall_s": 1.7107620239257812,
+      "prompt_tokens": 180,
+      "gen_tokens": 20,
+      "prompt_s": 1.025366,
+      "gen_s": 0.668773,
+      "model": "qwen3-coder:30b",
+      "nonempty": true,
+      "mentions_expected_token": true,
+      "mentions_passing_file": false,
+      "word_count": 10
+    },
+    {
+      "repeat": 2,
+      "condition": "breaking_only",
+      "case": "required_argument",
+      "payload": {
+        "change": "add(a, b) -> add(a, b, carry)",
+        "claim": "1 call site(s): 1 break, 0 unsure, 0 fit",
+        "sites": [
+          {
+            "where": "tests/test_calc.py:7",
+            "verdict": "breaks",
+            "why": "missing required 'carry'",
+            "code": "add(1, 2)"
+          }
+        ]
+      },
+      "text": "Update the call site in tests/test_calc.py:7 to include the required 'carry' parameter.",
+      "status": "ok",
+      "wall_s": 1.6259443759918213,
+      "prompt_tokens": 132,
+      "gen_tokens": 21,
+      "prompt_s": 0.908296,
+      "gen_s": 0.706114,
+      "model": "qwen3-coder:30b",
+      "nonempty": true,
+      "mentions_expected_token": true,
+      "mentions_passing_file": false,
+      "word_count": 12
+    },
+    {
+      "repeat": 2,
+      "condition": "breaking_only",
+      "case": "keyword_rename",
+      "payload": {
+        "change": "Ledger.post(self, amount, memo) -> Ledger.post(self, amount, note)",
+        "claim": "1 call site(s): 1 break, 0 unsure, 0 fit",
+        "sites": [
+          {
+            "where": "report.py:18",
+            "verdict": "breaks",
+            "why": "unknown keyword 'memo'",
+            "code": "ledger.post(a, memo=\"auto\")"
+          }
+        ]
+      },
+      "text": "Update report.py line 18 from memo=\\\"auto\\\" to note=\\\"auto\\\" for Ledger.post() call.",
+      "status": "ok",
+      "wall_s": 1.707075834274292,
+      "prompt_tokens": 137,
+      "gen_tokens": 24,
+      "prompt_s": 0.883255,
+      "gen_s": 0.812909,
+      "model": "qwen3-coder:30b",
+      "nonempty": true,
+      "mentions_expected_token": true,
+      "mentions_passing_file": false,
+      "word_count": 11
+    }
+  ],
+  "installed_model": {
+    "name": "qwen3-coder:30b",
+    "model": "qwen3-coder:30b",
+    "modified_at": "2026-09-14T12:03:02.165996203+02:00",
+    "size": 18556700761,
+    "digest": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca",
+    "details": {
+      "parent_model": "",
+      "format": "gguf",
+      "family": "qwen3moe",
+      "families": [
+        "qwen3moe"
+      ],
+      "parameter_size": "30.5B",
+      "quantization_level": "Q4_K_M",
+      "context_length": 262144,
+      "embedding_length": 2048
+    },
+    "capabilities": [
+      "completion",
+      "tools"
+    ]
+  },
+  "ollama_version": {
+    "version": "0.33.3"
+  },
+  "load_reply": {
+    "model": "qwen3-coder:30b",
+    "created_at": "2026-09-14T10:03:48.170167234Z",
+    "response": "",
+    "done": true,
+    "done_reason": "load"
+  },
+  "load_wall_s": 15.437,
+  "resident_after_load": {
+    "models": [
+      {
+        "name": "qwen3-coder:30b",
+        "model": "qwen3-coder:30b",
+        "size": 19196949240,
+        "digest": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca",
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen3moe",
+          "families": [
+            "qwen3moe"
+          ],
+          "parameter_size": "30.5B",
+          "quantization_level": "Q4_K_M"
+        },
+        "expires_at": "2026-09-14T12:18:48.172153943+02:00",
+        "size_vram": 5828436294,
+        "context_length": 4096
+      }
+    ]
+  },
+  "resident_after_run": {
+    "models": [
+      {
+        "name": "qwen3-coder:30b",
+        "model": "qwen3-coder:30b",
+        "size": 19196949240,
+        "digest": "06c1097efce0431c2045fe7b2e5108366e43bee1b4603a7aded8f21689e90bca",
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen3moe",
+          "families": [
+            "qwen3moe"
+          ],
+          "parameter_size": "30.5B",
+          "quantization_level": "Q4_K_M"
+        },
+        "expires_at": "2026-09-14T12:19:09.628898485+02:00",
+        "size_vram": 5828436294,
+        "context_length": 4096
+      }
+    ]
+  },
+  "summary": {
+    "all_sites": {
+      "calls": 6,
+      "median_s": 1.853,
+      "max_s": 2.384,
+      "p95_nearest_rank_s": 2.384,
+      "nonempty": 6,
+      "expected_token": 6,
+      "passing_file_mentions": 0,
+      "over_25_words": 0
+    },
+    "breaking_only": {
+      "calls": 6,
+      "median_s": 1.661,
+      "max_s": 1.74,
+      "p95_nearest_rank_s": 1.74,
+      "nonempty": 6,
+      "expected_token": 6,
+      "passing_file_mentions": 0,
+      "over_25_words": 0
+    }
+  }
+}

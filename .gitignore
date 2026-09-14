@@ -1,0 +1,9 @@
+# This repository tracks only what is explicitly un-ignored below.
+#
+# ~/repos is the parent of every project on this machine. Most of its entries are their own
+# git repositories, git worktrees, or local state, and nesting those here would either break
+# them or silently swallow them. So the default is to ignore everything, and each project that
+# genuinely belongs to this repository is named one line at a time.
+/*
+!/.gitignore
+!/devcompanion/

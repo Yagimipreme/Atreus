@@ -1,0 +1,27 @@
+digraph containers {
+  graph [rankdir=TB, bgcolor="transparent", pad=.3, nodesep=.65, ranksep=.9, fontname="Arial", label="C4 · Level 2 · Containers", labelloc=t, fontsize=22];
+  node [shape=box, style="rounded,filled", fillcolor="#e9eff5", color="#62758a", fontname="Arial", fontsize=12, margin=".2,.15"];
+  edge [fontname="Arial", fontsize=10, color="#53677b"];
+  dev [label="Developer\n[Person]", fillcolor="#163e61", fontcolor=white];
+  project [label="Target project\n[External system]\nDisk + Git + pytest"];
+  model [label="Optional model server\n[External system]\nHTTP API"];
+  subgraph cluster_system {
+    label="devcompanion · software system boundary"; color="#207b85"; style=rounded;
+    adapter [label="Neovim adapter\n[Container: Lua, hosted in Neovim]\nCollect / transport / findings / panel", fillcolor="#207b85", fontcolor=white];
+    state [label="Workspace state\n[Data store: local files]\n.companion/\nInbox, events, snapshots, view, evidence, board", shape=cylinder];
+    engine [label="Engine\n[Container: Python process]\nCLI + producers + one scheduler worker", fillcolor="#207b85", fontcolor=white];
+    returns [label="Return channel\n[Files in workspace state]\nfindings.jsonl · engine.json\nRewritten whole, renamed into place"];
+    outbox [label="outbox.jsonl · NO WRITER YET\n[Planned: engine asks the editor for LSP answers]", style="rounded,filled,dashed", fillcolor="#fff0d2", color="#ad6800"];
+  }
+  dev -> adapter [label=":CompanionStart / :CompanionPanel"];
+  adapter -> state [label="Appends inbox.jsonl\nCanonical buffer text + editor events"];
+  state -> engine [label="Tails inbox; reads snapshots / view / evidence"];
+  engine -> state [label="Writes events, snapshots, view.json, evidence,\nstate.json, board.md, quickfix.txt"];
+  engine -> returns [label="Atomic whole-file publish"];
+  returns -> adapter [label="Polled by mtime; panel redraws"];
+  adapter -> dev [label="One read-only side pane"];
+  engine -> project [label="watchdog, git show, rg, pytest\nSaved content only"];
+  engine -> model [label="Optional suggestion request"];
+  engine -> outbox [label="Contract only", style=dashed, color="#ad6800"];
+  outbox -> adapter [label="Reader exists; engine has nothing to ask yet", style=dashed, color="#ad6800"];
+}

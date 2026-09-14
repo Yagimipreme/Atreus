@@ -1,0 +1,136 @@
+{
+ "note": "Canonical text cases. See docs/text-canon.md. bytes_hex is what Neovim writes to disk for this buffer; sha is sha256(bytes)[:16], the engine's snapshot sha. Regenerate only with a reason: these pin a cross-language contract.",
+ "cases": [
+  {
+   "name": "empty-buffer",
+   "lines": [
+    ""
+   ],
+   "fileformat": "unix",
+   "eol": true,
+   "bytes_hex": "0a",
+   "size": 1,
+   "sha": "01ba4719c80b6fe9"
+  },
+  {
+   "name": "empty-buffer-noeol",
+   "lines": [
+    ""
+   ],
+   "fileformat": "unix",
+   "eol": false,
+   "bytes_hex": "",
+   "size": 0,
+   "sha": "e3b0c44298fc1c14"
+  },
+  {
+   "name": "single-line",
+   "lines": [
+    "hello"
+   ],
+   "fileformat": "unix",
+   "eol": true,
+   "bytes_hex": "68656c6c6f0a",
+   "size": 6,
+   "sha": "5891b5b522d5df08"
+  },
+  {
+   "name": "two-lines",
+   "lines": [
+    "a",
+    "b"
+   ],
+   "fileformat": "unix",
+   "eol": true,
+   "bytes_hex": "610a620a",
+   "size": 4,
+   "sha": "911169ddaaf146af"
+  },
+  {
+   "name": "no-trailing-newline",
+   "lines": [
+    "a",
+    "b"
+   ],
+   "fileformat": "unix",
+   "eol": false,
+   "bytes_hex": "610a62",
+   "size": 3,
+   "sha": "7e18f737311b2dc3"
+  },
+  {
+   "name": "blank-last-line",
+   "lines": [
+    "a",
+    ""
+   ],
+   "fileformat": "unix",
+   "eol": true,
+   "bytes_hex": "610a0a",
+   "size": 3,
+   "sha": "a7da489976d00474"
+  },
+  {
+   "name": "dos-line-endings",
+   "lines": [
+    "a",
+    "b"
+   ],
+   "fileformat": "dos",
+   "eol": true,
+   "bytes_hex": "610d0a620d0a",
+   "size": 6,
+   "sha": "58055bdcc73787eb"
+  },
+  {
+   "name": "python-def",
+   "lines": [
+    "def add(a, b, carry):",
+    "    return a + b + carry"
+   ],
+   "fileformat": "unix",
+   "eol": true,
+   "bytes_hex": "6465662061646428612c20622c206361727279293a0a2020202072657475726e2061202b2062202b2063617272790a",
+   "size": 47,
+   "sha": "349c879ed44bc4be"
+  },
+  {
+   "name": "utf8-identifier",
+   "lines": [
+    "def na\u00efve_add(a, b):",
+    "    return a + b"
+   ],
+   "fileformat": "unix",
+   "eol": true,
+   "bytes_hex": "646566206e61c3af76655f61646428612c2062293a0a2020202072657475726e2061202b20620a",
+   "size": 39,
+   "sha": "4a03b59c8c9ec7e1"
+  },
+  {
+   "name": "tabs-and-spaces",
+   "lines": [
+    "if x:",
+    "\tpass"
+   ],
+   "fileformat": "unix",
+   "eol": true,
+   "bytes_hex": "696620783a0a09706173730a",
+   "size": 12,
+   "sha": "967f305996a0c81f"
+  },
+  {
+   "name": "internal-blank-lines",
+   "lines": [
+    "a",
+    "",
+    "",
+    "b"
+   ],
+   "fileformat": "unix",
+   "eol": true,
+   "bytes_hex": "610a0a0a620a",
+   "size": 6,
+   "sha": "ebbfa3d605b9dd23"
+  }
+ ]
+}

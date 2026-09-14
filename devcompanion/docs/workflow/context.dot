@@ -1,0 +1,15 @@
+digraph context {
+  graph [rankdir=LR, bgcolor="transparent", pad=.3, nodesep=.6, ranksep=.85, fontname="Arial", label="C4 · Level 1 · System context", labelloc=t, fontsize=22];
+  node [shape=box, style="rounded,filled", fillcolor="#e9eff5", color="#62758a", fontname="Arial", fontsize=13, margin=".22,.16"];
+  edge [fontname="Arial", fontsize=11, color="#53677b"];
+  developer [label="Developer\n[Person]\nEdits code; opens the panel on demand", fillcolor="#163e61", fontcolor=white];
+  companion [label="devcompanion\n[Software system]\nObserves buffers and files; prepares evidence", fillcolor="#207b85", fontcolor=white];
+  project [label="Target project\n[External software system]\nWorking tree, Git history and pytest tests"];
+  model [label="Optional model server\n[External software system]\nOllama / OpenAI-compatible HTTP API"];
+  developer -> companion [label="Starts observation; types; opens the panel"];
+  developer -> project [label="Edits and saves"];
+  companion -> project [label="Reads code and HEAD; invokes pytest\nSaved content only"];
+  project -> companion [label="File changes, callers, test results"];
+  companion -> developer [label="Panel: findings, revision, engine and model state"];
+  companion -> model [label="Requests a sentence for breaking evidence\nOnly when configured"];
+}
