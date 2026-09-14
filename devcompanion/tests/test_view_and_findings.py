@@ -258,6 +258,32 @@ def test_no_published_field_ever_contains_a_newline():
                 assert "\n" not in text and "\r" not in text, f"{f['kind']}.{key}: {text!r}"
 
 
+def test_a_diagnostic_is_titled_as_a_sentence_and_keeps_its_message():
+    """The title is what the panel shows in its summary row; the language server's own wording,
+    all of it, stays in the evidence for whoever asks for it."""
+    diags = {"calc.py": [{"line": 8, "col": 5, "severity": "error", "message": MULTILINE,
+                          "code": "reportCallIssue", "source": "basedpyright"}]}
+    f = findings_out.from_diagnostics(diags, MANIFEST)[0]
+    assert f["title"] == "split() has no overload for these arguments"
+    assert f["evidence"][0]["detail"].startswith('No overloads for "split" match')
+    assert "Argument of type" in f["evidence"][0]["detail"]
+
+
+def test_test_results_publish_their_counts():
+    def published(claim):
+        rec = {"key": "test_run:calc.py:-", "kind": "test_run", "title": "tests mentioning add",
+               "claim": claim, "based_on": {"calc.py": "aaa"}, "status": "fresh",
+               "fingerprint": "fp", "ts": 1.0, "locations": [], "details": {}}
+        return findings_out.from_record(rec, MANIFEST)[0]["outcome"]
+
+    assert published("passed: 68 passed, 2 skipped in 4.34s") == {
+        "status": "passed", "counts": {"passed": 68, "skipped": 2}}
+    assert published("failed: 1 failed, 3 passed, 1 error in 0.2s") == {
+        "status": "failed", "counts": {"failed": 1, "passed": 3, "errors": 1}}
+    assert published("unavailable: pytest not importable in this interpreter") == {
+        "status": "unavailable", "counts": {}}
+
+
 def test_flattening_keeps_the_content_readable():
     assert findings_out.line(MULTILINE).startswith('No overloads for "split" match')
     assert "Argument of type" in findings_out.line(MULTILINE)

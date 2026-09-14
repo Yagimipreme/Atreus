@@ -170,7 +170,9 @@ adapter renders in file order.
 | `id` | string | stable across re-derivations of the same claim |
 | `kind` | string | `diagnostic_context`, `caller_affected`, `doc_passage`, `test_result`, `action`, `roadmap_note` |
 | `surface` | string | `errors`, `callers`, `docs`, `roadmap` — which surface renders it |
-| `title` | string | one line, no trailing period |
+| `title` | string | one line, no trailing period; for `diagnostic_context`, the engine's one-sentence reading of the messages it grouped (`present/problems.py`), never a truncated message |
+| `facts` | object | present on `diagnostic_context`: what the sentence names, `{symbol?, expected?, got?, parameter?}`. Every `symbol`, `expected` and `got` appears verbatim in `title`, so the editor can colour it there |
+| `diagnostics` | int | present on `diagnostic_context`: how many language-server messages this one problem stands for; each is in `evidence` |
 | `basis` | string | `observed`, `inferred`, `predicted`, `outdated` |
 | `location` | object | `{path,line,col}` or `{path}` for file scope; required unless `scope` given |
 | `scope` | array | paths or symbols, when the finding is not a single point |
@@ -179,6 +181,7 @@ adapter renders in file order.
 | `action` | object\|null | `{label, id}` — the adapter offers it, the engine performs it |
 | `depends_on` | object | `{path: content_sha}`; when any differs from the current buffer, the finding is stale |
 | `revision` | object | `{path: "disk"\|"editor"}` — whether each input was the saved file or an unsaved buffer |
+| `outcome` | object | present on `test_result`: `{status, counts}` — `status` is `passed`, `failed`, `unavailable`, `timeout`, `none` or `skipped`; `counts` holds what pytest reported, e.g. `{"passed": 68, "skipped": 2}`, and is empty when it reported none |
 | `saved_revision_only` | bool | present on `test_result`: this evidence cannot speak for unsaved buffers |
 | `snapshot_id` | string | the immutable input this was derived from |
 | `created_ts` | float | |
@@ -199,7 +202,14 @@ Example:
 
 ### Rendering rules the adapter must honour
 
-- Nothing opens, focuses, or steals the cursor. Surfaces open only on a keymap or command.
+- Nothing opens or takes focus on its own. Surfaces open only on a keymap or command. A
+  surface that was asked for may take focus, since its keys act inside it, and returns the
+  cursor to the window it was opened from when it closes.
+- Summary before evidence. A finding is first shown as its place and one sentence; its
+  evidence, provenance and code are shown on request. Engine metadata is not mixed into the
+  list of findings: it belongs to a separate view, except for a notice when the engine is not
+  running, has an error, or is still catching up.
+- A `test_result` whose `outcome.status` is not `failed` is a count, not an item.
 - A finding whose `depends_on` no longer matches the live buffer renders dimmed as stale, or is
   hidden, per user setting. It is never silently shown as current. The adapter recomputes this
   itself from the live buffer rather than trusting the published file, because the buffer moves

@@ -22,11 +22,16 @@ cmd("CompanionStop", function()
   require("companion").stop()
 end, { desc = "Stop observing" })
 
--- One pane, opened on request and never on its own. The filtered commands are the same pane
--- with one section shown, so there is only ever one place to look.
+-- One panel, opened on request and never on its own. The filtered commands are the same panel
+-- with one surface shown, so there is only ever one place to look.
 cmd("CompanionPanel", function()
   require("companion").toggle()
 end, { desc = "Toggle the companion panel" })
+
+-- Sticky: the panel stays open when the cursor leaves it and after a jump.
+cmd("CompanionPanelStick", function()
+  require("companion").stick()
+end, { desc = "Toggle whether the companion panel stays open" })
 
 cmd("CompanionErrors", function()
   require("companion").panel("errors")
@@ -36,9 +41,14 @@ cmd("CompanionCallers", function()
   require("companion").panel("callers")
 end, { desc = "Open the panel, affected callers only" })
 
+-- Engine and adapter internals. Kept out of the panel on purpose.
+cmd("CompanionInfo", function()
+  require("companion").info()
+end, { desc = "Show engine and adapter internals" })
+
 cmd("CompanionStatus", function()
-  require("companion").status()
-end, { desc = "Show adapter and engine state" })
+  require("companion").info()
+end, { desc = "Same as :CompanionInfo" })
 
 cmd("CompanionGoal", function(args)
   require("companion").goal(args.args)

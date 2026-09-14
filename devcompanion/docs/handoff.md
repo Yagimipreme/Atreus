@@ -1,6 +1,6 @@
 # devcompanion handoff
 
-Status: 2026-09-14, third pass. This is the current pickup document for the passive
+Status: 2026-09-14, fourth pass (UI). This is the current pickup document for the passive
 development companion. It covers what exists, what was verified, what is only designed, and
 the next implementation order.
 
@@ -25,6 +25,75 @@ Read these when taking over:
   and model evaluation order.
 - [local model results](evaluations/local-model-results.md) for measured Qwen3-Coder and
   fallback behavior.
+
+## UI pass (2026-09-14, fourth pass)
+
+Direction from the user, with a screenshot of the old pane: it read like a log window. Four
+surfaces competed for space (tree, editor, terminal, companion); the companion front-loaded
+engine, buffer, model and context metadata and then echoed every diagnostic verbatim. The
+redesign is three levels of attention, and the rule for the panel is *one line per problem, one
+inspected problem at a time, raw diagnostic only on request.* Details in
+[nvim/README.md](../nvim/README.md).
+
+Built:
+
+- **At rest: a statusline count.** `require("companion").statusline()` and `statusline_hl()`:
+  `◉ 5`, `◉`, `◉ 5 …`, `◌`. Wired into the user's LazyVim lualine in
+  `~/.config/nvim/lua/plugins/devcompanion.lua`, with `<leader>aa` for the panel and
+  `<leader>as` for info. Avante was removed from that config at the user's request, which freed
+  `<leader>a…`.
+- **Asked: the panel** (`panel.lua`), a float at the right edge rather than a split. `↵`
+  inspects one problem (the code with Tree-sitter highlighting and a caret, got and expected,
+  what changed, a likely fix when a model offered one); `↵` again goes to it; `d` adds
+  provenance (source, every raw diagnostic, basis, buffer). The footer lists only keys that do
+  something. Having been asked for, it takes focus, because its keys act inside it, and returns
+  the cursor when it closes. That reverses the earlier "hands the cursor back on open" rule; the
+  contract's rendering rules say so. Sticky mode (`ui.sticky`, `:CompanionPanelStick`, `s`)
+  keeps it open on leaving and after a jump.
+- **Metadata: `:CompanionInfo`** (`info.lua`), everything the old header had plus intake and
+  adapter counters. `:CompanionStatus` opens the same view.
+- **Problems, not diagnostics** (`present/problems.py`, engine side). Each language-server
+  message is normalised to one sentence plus the facts it names (`symbol`, `expected`, `got`,
+  `parameter`), and messages about one mistake are grouped: same line and overlapping ranges,
+  the same symbol, the same construct, or codeless syntax errors from one source. Checked
+  against the user's live basedpyright output: four messages in `testing/test.py` became two
+  problems, `split() expects str | None, got int` and `incomplete import statement`. The panel
+  colours the facts, never the whole sentence. Contract additions: `facts` and `diagnostics` on
+  `diagnostic_context`, `outcome` on `test_result`; a diagnostic's `title` is now the sentence.
+- **Green test runs are a count** (`✓ 71 tests`) from `outcome`, not a row.
+
+Found and fixed on the way, by using the panel in a real editor:
+
+- **An unsaved edit to a file opened after `:CompanionStart` reported nothing.** The first event
+  for such a path is the buffer. `view.disk_revision` hashed the file without storing its bytes,
+  so the comparison had nothing to read, and every later save of that path was "first
+  observation". `engine.handle_event` now stores the file as the baseline on first sight of a
+  buffer. Regression test:
+  `test_a_file_first_seen_as_an_unsaved_buffer_is_judged_against_the_file`. The harness never
+  caught it because every scenario opens its files before `:CompanionStart`.
+- **Diagnostics that settled before `:CompanionStart` were never sent**, so the panel stayed
+  empty until the next edit. `collect.announce_open_buffers` now sends them with the buffer.
+- A `QuitPre` handler written for sticky mode made `:qa!` hang with the panel open. Neovim 0.12
+  does not need it; it is gone. The harness caught this one.
+- **`:CompanionStart` run with the sticky panel focused observed a workspace called
+  `companion:/`.** The root was derived from the current buffer's name, and `companion://panel`
+  reads as a path. That editor then watched nothing real, and the panel said "no problems" and
+  "engine stopped" over an empty store. Found by the user on first live use of sticky mode.
+  `util.workspace_root` now refuses URI-like names; commands fall back to the panel's workspace
+  or the observed one; and a panel opened on an unobserved workspace says `not observing this
+  workspace · :CompanionStart` instead of describing an empty store. Both are harness rows.
+
+Not built, and what each waits on:
+
+- **Deep-work workspace** (plan, grill, review floats): the Chat surface, step 8 below.
+- **Proposed-fix diff view** (`f`, accept, reject, next): the outbox writer and edit actions,
+  step 4. The panel shows no `f` key until then.
+- **Model-written sentences for diagnostics.** Today's sentences come from rules, and a message
+  no rule knows keeps its first line. A model may rewrite sentences later; grouping and facts
+  stay deterministic, because they are what make a model's sentence checkable.
+
+Pick-up note: an engine started before this pass publishes the old finding shape. The adapter
+still renders it, but grouping, facts and test counts appear only after the engine restarts.
 
 ## User direction
 
@@ -145,7 +214,7 @@ now: it has no LSP question to ask. The adapter already tails it.
 The harness is [scripts/check-workflow.py](../scripts/check-workflow.py). It uses real CLI
 execution, the real engine, real pytest, and real headless Neovim.
 
-Latest documented result: **44 checks passed; 0 failed; 0 gaps.** Plus 89 unit tests.
+Latest documented result: **51 checks passed; 0 failed; 0 gaps.** Plus 102 unit tests.
 
 ```bash
 uv run pytest -q
@@ -161,7 +230,11 @@ Beyond the previously passing saved-file workflow, the harness now establishes:
   one value.
 - Protocol v2 fields survive intake; buffer text does not enter the event log.
 - `findings.jsonl` and `engine.json` are written, with per-input revision origins.
-- The pane draws the header and findings, does not steal focus, and toggles closed.
+- The panel leads with a problem count and keeps engine metadata out (that is
+  `:CompanionInfo`); `↵` inspects one problem, `d` adds provenance; it opens only on request,
+  takes focus, gives the cursor back on close, and a sticky panel survives leaving and a jump.
+- Two language-server messages about one mistake, one of them multi-line, draw as one problem
+  with one sentence; the statusline carries the count.
 - Saving retires the overlay; the same bytes moving from buffer to disk re-runs the tools that
   read files.
 - Quitting the editor drops its overlays.
@@ -302,11 +375,12 @@ once the model's paragraphs have been seen in real use.
    Two observations already on the table from the first minutes of use:
 
    - The panel echoes editor diagnostics the developer can already see in their sign column and
-     virtual text — four of five entries in the first real session. Warnings were excluded for
-     exactly that reason and errors were republished anyway, which does not hold up. Candidate
-     rule: show what the editor cannot already say, or restrict the echo to files that are not
-     open.
-   - A diagnostic finding repeats its title verbatim in its evidence line. Small, and a defect.
+     virtual text — four of five entries in the first real session. **Partly addressed by the UI
+     pass:** diagnostics are no longer echoed but grouped into problems and said as sentences,
+     with the raw messages behind `d`. Still open: whether errors in a file that is open belong
+     in the panel at all, or only those the editor cannot already show.
+   - A diagnostic finding repeated its title verbatim in its evidence line. **Fixed by the UI
+     pass:** the title is the engine's sentence, and the raw message appears only on `d`.
 
 2. **Provider abstraction.** The Ollama path is built; the two CLI providers (Claude Code,
    Codex) are not, and neither is the tripwire test that must gate each one. opencode is
@@ -387,6 +461,9 @@ A watcher is running against this repository with the model attached:
 ```bash
 uv run companion --root . --model qwen3-coder:30b --keep-alive 30m watch
 ```
+
+Restarted for the UI pass on 2026-09-14 with the same arguments, detached (`setsid nohup`), and
+logging to `.companion/watch.log` so the log no longer lives in a session's scratch directory.
 
 The Neovim side is registered as a lazy.nvim plugin, so `:CompanionStart` and
 `:CompanionPanel` are available without touching `runtimepath` by hand.

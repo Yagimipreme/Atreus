@@ -13,10 +13,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from pathlib import Path
 
 from ..view.index import write_atomic
+from . import problems
 
 SCHEMA_VERSION = 1
 MAX_DIAGNOSTICS = 20
@@ -36,6 +38,21 @@ def line(text: object, limit: int = 300) -> str:
     this boundary's job, not the adapter's.
     """
     return " ".join(str(text or "").split())[:limit]
+
+
+_COUNT = re.compile(r"(\d+) (passed|failed|errors?|skipped|xfailed|xpassed|deselected)\b")
+
+
+def outcome(claim: str) -> dict:
+    """`passed: 68 passed, 2 skipped in 4.34s` -> status and counts, so the editor can say
+    `✓ 68 tests` without parsing pytest's prose itself. A run with no counts (unavailable,
+    replay) has an empty `counts`, not a missing one."""
+    status, _, summary = claim.partition(":")
+    counts: dict[str, int] = {}
+    for n, word in _COUNT.findall(summary):
+        key = "errors" if word.startswith("error") else word
+        counts[key] = counts.get(key, 0) + int(n)
+    return {"status": status.strip(), "counts": counts}
 
 
 def _id(*parts: object) -> str:
@@ -75,7 +92,7 @@ def from_record(rec: dict, manifest: dict) -> list[dict]:
             out[0]["evidence"].append({"kind": "model", "ref": "suggestion",
                                        "detail": line(rec["suggestion"])})
     elif kind == "test_run":
-        status = rec["claim"].split(":", 1)[0]
+        result = outcome(rec["claim"])
         details = rec.get("details", {})
         out.append({
             "schema_version": SCHEMA_VERSION,
@@ -86,7 +103,8 @@ def from_record(rec: dict, manifest: dict) -> list[dict]:
             "basis": "outdated" if stale else "observed",
             "scope": sorted(p for p in rec["based_on"] if p.endswith(".py")),
             "consequence": line(rec["claim"], 200),
-            "evidence": [{"kind": "test", "ref": status, "detail": line(v)}
+            "outcome": result,
+            "evidence": [{"kind": "test", "ref": result["status"], "detail": line(v)}
                          for v in (details.get("failed"), details.get("first_error")) if v],
             "action": None,
             "depends_on": rec["based_on"],
@@ -99,25 +117,28 @@ def from_record(rec: dict, manifest: dict) -> list[dict]:
 
 
 def from_diagnostics(diagnostics: dict[str, list[dict]], manifest: dict) -> list[dict]:
-    """The editor's own diagnostics, echoed back so one pane holds the whole picture. Only
+    """The editor's own diagnostics, interpreted rather than echoed: grouped into problems and
+    each said as one sentence (`problems.py`), with every raw message kept as evidence. Only
     errors: warnings are already in the sign column and repeating them is noise."""
     out: list[dict] = []
     for path in sorted(diagnostics):
-        for d in diagnostics[path]:
-            if d.get("severity") != "error":
-                continue
+        errors = [d for d in diagnostics[path] if d.get("severity") == "error"]
+        for problem in problems.group(errors):
+            lead = problem.lead
             out.append({
                 "schema_version": SCHEMA_VERSION,
-                "id": _id("diag", path, d.get("line"), d.get("col"), d.get("message")),
+                "id": _id("diag", path, lead.get("line"), lead.get("col"), lead.get("message")),
                 "kind": "diagnostic_context",
                 "surface": "errors",
-                "title": line(d.get("message"), 160),
+                "title": line(problem.sentence, 160),
+                "facts": {k: line(v, 80) for k, v in problem.facts.items()},
+                "diagnostics": len(problem.members),
                 "basis": "observed",
-                "location": {"path": path, "line": d.get("line"), "col": d.get("col")},
-                "consequence": line(f"{d.get('source') or 'language server'}"
-                                   + (f" {d['code']}" if d.get("code") else ""), 200),
+                "location": {"path": path, "line": lead.get("line"), "col": lead.get("col")},
+                "consequence": line(f"{lead.get('source') or 'language server'}"
+                                   + (f" {lead['code']}" if lead.get("code") else ""), 200),
                 "evidence": [{"kind": "diagnostic", "ref": d.get("code") or "-",
-                              "detail": line(d.get("message"))}],
+                              "detail": line(d.get("message"))} for d in problem.members],
                 "action": None,
                 "depends_on": {p: r["sha"] for p, r in manifest.items() if p == path},
                 "revision": {path: manifest.get(path, {}).get("origin", "disk")},

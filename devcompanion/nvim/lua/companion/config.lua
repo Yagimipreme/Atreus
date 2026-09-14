@@ -31,9 +31,10 @@ M.defaults = {
   -- Presentation. Nothing here may cause a window to open on its own.
   ui = {
     stale = "dim",     -- "dim" | "hide"
-    max_findings = 12, -- per surface; the engine also caps, this is the last word
-    split = "right",   -- where a surface opens when the user asks for it
-    width = 60,
+    max_findings = 20, -- items in the panel; the engine also caps, this is the last word
+    width = 46,        -- panel columns inside the border
+    sticky = false,    -- keep the panel open when the cursor leaves it; :CompanionPanelStick toggles
+    -- border = "rounded", -- unset: 'winborder' when it names one, otherwise rounded
   },
 }
 

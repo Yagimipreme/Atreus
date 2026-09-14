@@ -35,7 +35,9 @@ end
 local MARKERS = { ".git", "Cargo.toml", "pyproject.toml", "package.json", "go.mod" }
 
 function M.workspace_root(path)
-  if path == nil or path == "" then
+  -- A URI-like buffer name (companion://panel, oil://, fugitive://) is not a path on disk. Read
+  -- as one, `companion://panel` became a workspace called "companion:/" and was observed.
+  if path == nil or path == "" or path:match("^%a[%w+.-]*://") then
     return nil
   end
   local found = vim.fs.find(MARKERS, { path = vim.fs.dirname(path), upward = true })[1]
@@ -86,6 +88,23 @@ end
 -- so an editor hash and an engine hash of the same bytes are directly comparable.
 function M.text_sha(text)
   return vim.fn.sha256(text):sub(1, 16)
+end
+
+-- A buffer's canonical hash, recomputed only when its content or its write format changed.
+-- Staleness is now asked by the statusline on every redraw, and re-hashing an unchanged buffer
+-- for each one would be the most expensive thing the adapter does.
+local sha_cache = {} -- bufnr -> { key, sha }
+
+function M.buffer_sha(buf)
+  local key = table.concat({ vim.b[buf].changedtick, vim.bo[buf].fileformat,
+                             tostring(vim.bo[buf].eol) }, ":")
+  local hit = sha_cache[buf]
+  if hit and hit.key == key then
+    return hit.sha
+  end
+  local sha = M.text_sha(M.canonical_text(buf))
+  sha_cache[buf] = { key = key, sha = sha }
+  return sha
 end
 
 -- vim.json.decode turns JSON null into vim.NIL, a userdata sentinel, so that a null inside an

@@ -56,17 +56,24 @@ st:write(vim.json.encode({
 }))
 st:close()
 vim.wait(2500, function()
-  return require("companion.findings").count() > 0 and require("companion.panel").engine ~= nil
+  local store = require("companion.findings")
+  return store.count() > 0 and store.engine ~= nil
 end)
 
-local before = vim.api.nvim_get_current_win()
+local code = vim.api.nvim_get_current_win()
 print("windows open before asking: " .. #vim.api.nvim_list_wins())
+print("statusline: " .. require("companion").statusline())
 vim.cmd("CompanionPanel")
 print("windows open after :CompanionPanel: " .. #vim.api.nvim_list_wins())
-print("focus stayed in the code window: " .. tostring(vim.api.nvim_get_current_win() == before))
-print("--- panel contents")
+print("panel took focus, having been asked for: " .. tostring(vim.api.nvim_get_current_win() ~= code))
 local buf = vim.fn.bufnr("companion://panel")
+print("--- panel contents")
 for _, l in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do print(l) end
+vim.cmd("normal d")
+print("--- after d")
+for _, l in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do print(l) end
+vim.cmd("normal q")
+print("q gave the cursor back: " .. tostring(vim.api.nvim_get_current_win() == code))
 LUA
 
 nvim --headless -u NONE --cmd "set rtp+=$HERE/nvim" \

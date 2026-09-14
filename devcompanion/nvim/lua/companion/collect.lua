@@ -193,6 +193,15 @@ function M.announce_open_buffers(root, tr)
         ev.kind = ev.dirty and "buffer_changed" or "buffer_saved"
         attach_text(ev, buf)
         tr:send(ev)
+        -- The same for what the language server already said: DiagnosticChanged fired before
+        -- anyone was listening, and it will not fire again until the next edit.
+        local items = diagnostics_for(buf)
+        if #items > 0 then
+          local diags = buffer_ref(root, buf)
+          diags.kind = "diagnostics"
+          diags.items = items
+          tr:send(diags)
+        end
         sent = sent + 1
       end
     end

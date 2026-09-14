@@ -1,5 +1,5 @@
--- Public module. Wires config + collect + transport + findings + panel, and owns nothing else.
--- Everything a user calls goes through here.
+-- Public module. Wires config + collect + transport + findings + the views, and owns nothing
+-- else. Everything a user calls goes through here.
 local config = require("companion.config")
 local util = require("companion.util")
 local transport = require("companion.transport")
@@ -9,19 +9,30 @@ local panel = require("companion.panel")
 
 local M = {}
 
-M.active = {} -- root -> true
+M.active = store.observed -- root -> true; shared, so the views can tell observed from empty
 
 function M.setup(opts)
   config.setup(opts)
   return M
 end
 
+-- The workspace a command is about. A real file names it. Anything else -- the panel itself, a
+-- terminal, a file tree -- does not, and with a sticky panel the cursor is often in one; then the
+-- panel's own workspace, or the one already observed, stands in.
 local function current_root()
-  local root = util.workspace_root(vim.api.nvim_buf_get_name(0))
+  local buf = vim.api.nvim_get_current_buf()
+  local root = vim.bo[buf].buftype == "" and util.workspace_root(vim.api.nvim_buf_get_name(buf)) or nil
+  root = root or panel.root() or next(M.active)
   if not root then
-    util.notify("no workspace root for this buffer", vim.log.levels.WARN)
+    util.notify("open a file in the workspace first", vim.log.levels.WARN)
   end
   return root
+end
+
+-- The store changed. The statusline and an open panel describe it; neither opens anything.
+local function changed(root)
+  panel.refresh(root)
+  vim.cmd("redrawstatus")
 end
 
 function M.start(root)
@@ -33,16 +44,16 @@ function M.start(root)
   local tr = transport.for_workspace(root)
   collect.start(root)
 
-  -- Findings: the engine rewrites the file, we reload and refresh whatever is open.
+  -- Findings: the engine rewrites the file, we reload and redraw whatever shows them.
   tr:watch("findings.jsonl", function(data)
     store.load(data)
-    panel.refresh(root)
+    changed(root)
   end)
 
-  -- Engine liveness. The panel's header is the only consumer, and it must keep rendering when
-  -- the file is absent: no engine running is a state to show, not an error.
+  -- Engine liveness. Absent is a state to show, not an error.
   tr:watch("engine.json", function(data)
-    panel.set_engine(root, util.decode_json(data))
+    store.set_engine(util.decode_json(data))
+    changed(root)
   end)
 
   -- Requests from the engine: currently only LSP queries.
@@ -61,15 +72,12 @@ function M.start(root)
     consumed = n
   end)
 
-  -- The panel's "buffer" line describes wherever the developer is, so it has to follow them.
-  -- Only when the pane is open: refreshing a hidden pane on every BufEnter is pure waste,
-  -- and opening it later rebuilds it from scratch anyway.
-  vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost" }, {
+  -- An open panel follows the developer: a save can retire a stale mark, a sticky panel's notice
+  -- is about whichever buffer they moved to, and a resize moves its right edge. Free when closed.
+  vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost", "VimResized" }, {
     group = vim.api.nvim_create_augroup("companion:panel:" .. root, { clear = true }),
     callback = function()
-      if panel.is_open() then
-        panel.refresh(root)
-      end
+      panel.refresh(root)
     end,
   })
 
@@ -88,11 +96,12 @@ function M.stop(root)
   transport.for_workspace(root):unwatch_all()
   pcall(vim.api.nvim_del_augroup_by_name, "companion:panel:" .. root)
   M.active[root] = nil
+  vim.cmd("redrawstatus")
   util.notify("stopped observing " .. root)
 end
 
--- The panel is the surface. `only` filters which finding sections it shows, which is all the
--- older per-surface commands ever were.
+-- The panel. `only` filters it to one surface, which is all :CompanionErrors and
+-- :CompanionCallers are.
 function M.panel(only)
   local root = current_root()
   if root then
@@ -100,15 +109,26 @@ function M.panel(only)
   end
 end
 
+-- Open, move into, or close the panel. An open panel already knows its workspace, which matters
+-- because from inside it the current buffer is the panel and has no workspace at all.
 function M.toggle(only)
+  if panel.is_open() then
+    return panel.toggle(nil, only)
+  end
   local root = current_root()
   if root then
-    panel.toggle(root, only)
+    panel.open(root, only)
   end
 end
 
-function M.open(surface)
-  M.panel(surface)
+function M.stick()
+  if panel.is_open() then
+    return panel.set_sticky()
+  end
+  local root = current_root()
+  if root then
+    panel.set_sticky(nil, root)
+  end
 end
 
 function M.goal(text)
@@ -119,30 +139,53 @@ function M.goal(text)
   end
 end
 
-function M.status()
+-- Engine and adapter internals, on request. Read fresh: this is the view someone opens when
+-- they suspect the cached picture is wrong.
+function M.info()
   local root = current_root()
   if not root then
     return
   end
   local tr = transport.for_workspace(root)
-  local engine = tr:read_json("engine.json") or panel.engine
-  local counts = {}
-  for name, items in pairs(store.findings) do
-    if #items > 0 then
-      table.insert(counts, name .. "=" .. #items)
-    end
+  local fresh = tr:read_json("engine.json")
+  if fresh then
+    store.set_engine(fresh)
   end
-  local lines = {
-    "workspace: " .. root,
-    "observing: " .. tostring(M.active[root] == true),
-    "events sent: " .. tr.seq .. " (session " .. tr.session .. ")",
-    "findings: " .. (#counts > 0 and table.concat(counts, " ") or "none"),
-    "engine: " .. (engine and (engine.state .. " pid=" .. tostring(engine.pid)
-      .. " model=" .. ((engine.model or {}).status or "?")) or "not running"),
-    "unsaved: " .. (engine and #(engine.dirty_buffers or {}) > 0
-      and table.concat(engine.dirty_buffers, " ") or "none"),
-  }
-  util.notify(table.concat(lines, "\n"))
+  require("companion.info").open(root, {
+    observing = M.active[root] == true, seq = tr.seq, session = tr.session,
+  })
+end
+
+-- ---------------------------------------------------------------- statusline
+
+-- For a statusline component. Empty when nothing is observed, so it can be left in a
+-- statusline permanently at no cost:
+--   ◉ 5    five things to act on        ◉      nothing to act on
+--   ◉ 5 …  the engine is still catching up with what is in front of you
+--   ◌      observing, but no engine is answering
+function M.statusline()
+  local root = next(M.active)
+  if not root then
+    return ""
+  end
+  if not store.engine_alive() then
+    return "◌"
+  end
+  local n = #store.issues(root)
+  local text = n > 0 and ("◉ " .. n) or "◉"
+  if store.busy(root, vim.api.nvim_get_current_buf()) then
+    text = text .. " …"
+  end
+  return text
+end
+
+-- The highlight group that goes with statusline(), for a component's colour.
+function M.statusline_hl()
+  local root = next(M.active)
+  if not root or not store.engine_alive() then
+    return "CompanionMuted"
+  end
+  return #store.issues(root) > 0 and "CompanionError" or "CompanionOk"
 end
 
 return M

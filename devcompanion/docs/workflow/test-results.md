@@ -1,6 +1,6 @@
 # devcompanion workflow check — 2026-09-14
 
-**36 checks passed; 0 failed; 0 integration gaps reproduced.**
+**51 checks passed; 0 failed; 0 integration gaps reproduced.**
 
 Rerun from the project root: `.venv/bin/python scripts/check-workflow.py`.
 The harness creates fresh disposable Git projects and stops its watcher on exit.
@@ -10,15 +10,17 @@ Everything below goes through a real subprocess: `companion ingest`, `companion 
 `companion replay`, `pytest`, and `nvim --headless` running the actual plugin. Neovim runs
 without swap or ShaDa persistence.
 
-This run supersedes the 2026-09-14 run that recorded 18 passes and two confirmed gaps
-(*Unsaved ingestion*, *Editor return files*). Both gaps are closed and are now asserted as
-capabilities rather than reproduced as absences; the rows that replaced them are named below.
+This run supersedes the earlier 2026-09-14 run that recorded 36 passes. The four panel rows of
+that run (*Panel renders engine state*, *Panel shows the unsaved caller finding*, *Panel opens
+without stealing focus*, *Panel toggles closed*) asserted the pane that the UI pass replaced;
+the rows that replace them are named below. Pipes inside an observation are written `/` so the
+table stays a table: `str / None` is `str | None`.
 
-Artifacts: `/tmp/devcompanion-check-3j1b7ej8`
+Artifacts: `/tmp/devcompanion-check-91ivji5q`
 
 | Result | Scenario | Observation |
 |---|---|---|
-| PASS | Existing unit suite | 60 passed in 0.13s |
+| PASS | Existing unit suite | 99 passed in 4.44s |
 | PASS | Canonical text agrees across Lua, Python and disk | 11/11 fixture cases hash identically in the adapter, the engine, and the file Neovim writes |
 | PASS | Baseline | No breaking finding for unchanged committed files |
 | PASS | Breaking signature | 2 call site(s): 2 break, 0 unsure, 0 fit |
@@ -40,13 +42,21 @@ Artifacts: `/tmp/devcompanion-check-3j1b7ej8`
 | PASS | Unsaved analysis says so | unsaved buffer; the file on disk still holds the previous version |
 | PASS | Unsaved edit runs no tests | pytest reads the working tree, so it is not run for buffer-only content |
 | PASS | Adapter and engine agree on the buffer hash | adapter 349c879ed44bc4be, engine 349c879ed44bc4be, finding depends on 349c879ed44bc4be |
-| PASS | Protocol v2 fields survive intake | dirty=True session=cb511a84 doc_version=5 language='python' origin=editor source=nvim; buffer text stays in the snapshot store, not the event log |
+| PASS | Protocol v2 fields survive intake | dirty=True session=6aa7faad-b628f doc_version=5 language='python' origin=editor source=nvim; buffer text stays in the snapshot store, not the event log |
 | PASS | Engine reports the unsaved buffer | {"state": "idle", "dirty_buffers": ["calc.py"], "findings": 2} |
 | PASS | Findings published for the unsaved edit | 2 caller_affected finding(s), each marked as resting on buffer content |
-| PASS | Panel renders engine state | header fields drawn: buffer, context, engine, model, unsaved |
-| PASS | Panel shows the unsaved caller finding | client.py:4  missing required 'carry' |
-| PASS | Panel opens without stealing focus | 2 windows open; the cursor stayed in the code window |
-| PASS | Panel toggles closed | :CompanionPanel a second time closes it |
+| PASS | Panel leads with a count, not engine metadata | first line '2 problems'; engine fields drawn: 0 |
+| PASS | Panel shows the unsaved caller finding | C client.py:4 unsaved |
+| PASS | Inspecting opens one problem | ↵ grew the panel from 7 to 12 lines, showing the call site's code 'return add(1, 2)' |
+| PASS | Provenance only on request | absent from the list and the inspected problem; d adds source, basis and buffer |
+| PASS | Engine metadata lives in :CompanionInfo | fields drawn: buffer, context, engine, model, unsaved |
+| PASS | Panel opens only when asked, as a focused float | no window appeared while findings arrived; :CompanionPanel opened a float and moved the cursor into it |
+| PASS | Closing the panel gives the cursor back | q closed it and returned to the code window; :CompanionPanel twice toggles it |
+| PASS | Before :CompanionStart the panel says it is not observing | not observing this workspace / :CompanionStart to begin |
+| PASS | A sticky panel stays in view | :CompanionPanelStick opened it without taking the cursor; it survived leaving and a jump; unsticking closed it — {"survived_leaving": true, "survived_jump": true, "opened": true, "unstick_closed": true, "stayed_in_code": true, "entered": true, "no_pseudo_root": true} |
+| PASS | Statusline carries the count | '◉ 2' |
+| PASS | Panel survives a multi-line diagnostic | add() expects str / None, got int |
+| PASS | One mistake reported twice is one problem | '3 problems · 2 diagnostics', and the row reads 'add() expects str / None, got int'; the language server's wording stays behind `d` |
 | PASS | Real Neovim :write → watch → evidence | Both breaking callers and a failed pytest result appear |
 | PASS | Lua save reaches engine | Not relying solely on filesystem watcher |
 | PASS | Editor return files | findings.jsonl and engine.json are written by the engine; outbox.jsonl waits for the engine to have an LSP question to ask |
@@ -54,33 +64,47 @@ Artifacts: `/tmp/devcompanion-check-3j1b7ej8`
 | PASS | Saved tests are labelled as saved-revision evidence | saved files only |
 | PASS | Test findings declare their revision limit | failed: 1 failed in 0.01s |
 | PASS | Editor departure drops its overlays | an editor that quits stops being credited with unsaved content |
+| PASS | A clean restart resumes at the offset: no reset, nothing re-read | {"malformed": 0, "offset": 4571, "resets": 0, "resumed_at": 4571, "skipped_known": 0} |
+| PASS | A clean restart does not touch events.jsonl or state.json | 20 line(s) in events.jsonl before and after |
+| PASS | The restarted engine's intake block updates without any new event | {"malformed": 0, "offset": 4571, "resets": 1, "resumed_at": 0, "skipped_known": 12} |
+| PASS | Restart does not reprocess events.jsonl or state.json | 20 line(s) in events.jsonl before and after the restart, evidence unchanged |
+| PASS | engine.json reports the intake block | {"malformed": 0, "offset": 4571, "resets": 1, "resumed_at": 0, "skipped_known": 12} |
+| PASS | The restarted engine saw the rotated file's old events and declined them | skipped_known=12, resets=1 — re-read, not re-observed for the first time |
+| PASS | A new edit after the restart is still picked up and produces a finding | 2 call site(s): 2 break, 0 unsure, 0 fit |
 
-## What the new rows establish
+## What the panel rows establish
 
-- **Canonical text agrees across Lua, Python and disk** — every case in
-  `tests/fixtures/text-canon.json` is loaded into a real buffer, hashed by the adapter's own
-  function, written with `:write`, and compared against the engine's hash and the bytes on
-  disk. This check found and killed a wrong special case for the empty buffer.
-- **Unsaved ingestion** (was GAP CONFIRMED) — a signature change typed into a buffer produces
-  caller findings while the file on disk still holds the original.
-- **Adapter and engine agree on the buffer hash** — the adapter's `text_sha`, the engine's
-  recorded `content_sha` and the sha a finding depends on are one value. Without this,
-  staleness is decoration.
-- **Protocol v2 fields survive intake** — `dirty`, `session`, `doc_version`, `language`,
-  `source` and the resolved origin all reach the engine's own log; the buffer text does not,
-  because it belongs in the snapshot store.
-- **Editor return files** (was GAP CONFIRMED) — `findings.jsonl` and `engine.json` are
-  written. `outbox.jsonl` is still absent, correctly: the engine has no LSP question to ask yet.
-- **Panel rows** — the pane is opened by command over files the engine wrote, draws the
-  header fields and the caller findings, hands the cursor straight back, and toggles closed.
-- **Saved-test rows** — pytest evidence is labelled as saved-revision-only, and the published
-  finding carries `saved_revision_only` so the editor cannot present it as speaking for a buffer.
-- **Editor departure drops its overlays** — quitting Neovim without saving stops the engine
-  crediting it with unsaved content.
-- **Buffers open before `:CompanionStart` are announced** — a buffer that was already open, and
-  already modified, reaches the engine at once instead of waiting for the next keystroke.
-  Buffers outside the workspace are skipped.
+- **Panel leads with a count, not engine metadata** — the first line is a problem count; no
+  pid, sequence number, model or retrieval field is drawn in the list.
+- **Panel shows the unsaved caller finding** — one row per problem, marked `unsaved` when the
+  claim rests on a buffer rather than a file.
+- **Inspecting opens one problem** — `↵` expands the problem under the cursor with the line of
+  code it points at, read from the live buffer.
+- **Provenance only on request** — source, basis and buffer are absent from the list and from
+  the inspected problem, and present after `d`.
+- **Engine metadata lives in :CompanionInfo** — the fields the old header carried are drawn in
+  the info view instead.
+- **Panel opens only when asked, as a focused float** — no window appears while findings
+  arrive; `:CompanionPanel` opens a float and moves the cursor into it, because its keys act
+  there.
+- **Closing the panel gives the cursor back** — `q` returns to the code window, and
+  `:CompanionPanel` from inside the panel closes it.
+- **Before :CompanionStart the panel says it is not observing** — no problem count and no
+  engine notice over a store nothing has filled.
+- **A sticky panel stays in view** — `:CompanionPanelStick` opens it without taking the cursor;
+  `:CompanionStart` run from inside it observes the real workspace, not `companion:/`; it
+  survives the cursor leaving and a jump; unsticking an unfocused panel closes it.
+- **Statusline carries the count** — `statusline()` returns `◉ N` while an engine is answering.
+- **One mistake reported twice is one problem** — two basedpyright messages about one call, one
+  of them several lines long, draw as a single row reading `add() expects str | None, got int`,
+  with the header saying how many diagnostics it stands for and neither raw message in the list.
 
-Board snapshots, panel dumps and command logs are alongside the report in the artifacts
-directory. Replay state is under `replayed/`. Canonical-text comparisons are in
-`canon-comparison.json`.
+## Rows carried over
+
+The canonical-text, unsaved-ingestion, hash-agreement, protocol-v2, return-file, saved-test,
+editor-departure, announce-on-start and restart rows are unchanged in meaning from the previous
+run; see `docs/handoff.md` for what each established when it was added.
+
+Board snapshots, panel dumps (`panel-compact.txt`, `panel-detail.txt`, `panel-raw.txt`,
+`panel-info.txt`, `panel-multiline.txt`) and command logs are alongside the report in the
+artifacts directory. Replay state is under `replayed/`.

@@ -130,29 +130,77 @@ vim.wait(600, function() return false end)
 '''
 
 
-# Open the pane over whatever the engine has already published, and dump what it drew. The
-# pane must render from the files alone: this Neovim edits nothing.
+# Open the panel over whatever the engine has already published, drive it the way a developer
+# would, and dump what it drew at each step. It must render from the files alone: this Neovim
+# edits nothing.
 PANEL = r"""local root = vim.env.COMPANION_TEST_ROOT
 local c = require("companion")
 c.setup({transport={poll_ms=50}, ui={width=70}})
 vim.cmd("filetype on")
 vim.cmd("edit " .. vim.fn.fnameescape(root .. "/client.py"))
+local code = vim.api.nvim_get_current_win()
+local windows_at_start = #vim.api.nvim_tabpage_list_wins(0)
+-- Before :CompanionStart the panel must say the workspace is not observed, not that an engine
+-- stopped or that there are no problems: nothing in this editor has read what an engine wrote.
+vim.cmd("CompanionPanel")
+local unobserved = vim.api.nvim_buf_get_lines(vim.fn.bufnr("companion://panel"), 0, -1, false)
+vim.cmd("normal q")
 c.start(root)
 vim.wait(4000, function()
-  return require("companion.findings").count() > 0 and require("companion.panel").engine ~= nil
+  local store = require("companion.findings")
+  return store.count() > 0 and store.engine ~= nil
 end, 50)
-local before = vim.api.nvim_get_current_win()
-vim.cmd("CompanionPanel")
 local panel = require("companion.panel")
-local buf = vim.fn.bufnr("companion://panel")
-vim.fn.writefile(vim.api.nvim_buf_get_lines(buf, 0, -1, false), vim.env.PANEL_OUT)
-vim.fn.writefile({ vim.json.encode({
-  opened = panel.is_open(),
-  kept_focus = vim.api.nvim_get_current_win() == before,
-  windows = #vim.api.nvim_tabpage_list_wins(0),
-}) }, vim.env.PANEL_STATE)
+local function dump(name)
+  local buf = vim.fn.bufnr(name)
+  return buf ~= -1 and vim.api.nvim_buf_get_lines(buf, 0, -1, false) or {}
+end
+local unasked = #vim.api.nvim_tabpage_list_wins(0) == windows_at_start
+
 vim.cmd("CompanionPanel")
-vim.fn.writefile({ vim.json.encode({ closed = not panel.is_open() }) }, vim.env.PANEL_CLOSED)
+local win = vim.api.nvim_get_current_win()
+local opened = { open = panel.is_open(), focused = win ~= code,
+                 float = vim.api.nvim_win_get_config(win).relative ~= "" }
+vim.fn.writefile(dump("companion://panel"), vim.env.PANEL_OUT)
+local statusline = c.statusline()
+vim.cmd([[execute "normal \<CR>"]])
+vim.fn.writefile(dump("companion://panel"), vim.env.PANEL_DETAIL)
+vim.cmd("normal d")
+vim.fn.writefile(dump("companion://panel"), vim.env.PANEL_RAW)
+vim.cmd("normal q")
+local closed = { closed = not panel.is_open(), back = vim.api.nvim_get_current_win() == code }
+vim.cmd("CompanionPanel")
+vim.cmd("CompanionPanel")
+closed.toggled = not panel.is_open()
+vim.cmd("CompanionInfo")
+vim.fn.writefile(dump("companion://info"), vim.env.PANEL_INFO)
+require("companion.info").close()
+
+-- Sticky: opened from the code window without taking the cursor, entered on request, and still
+-- there after the cursor leaves it and after a jump.
+vim.api.nvim_set_current_win(code)
+vim.cmd("CompanionPanelStick")
+local sticky = { opened = panel.is_open(), stayed_in_code = vim.api.nvim_get_current_win() == code }
+vim.cmd("CompanionPanel")
+sticky.entered = vim.api.nvim_get_current_win() ~= code
+-- From inside the panel the current buffer is companion://panel. It once resolved to a workspace
+-- called "companion:/", which :CompanionStart then observed instead of the real one.
+vim.cmd("CompanionStart")
+sticky.no_pseudo_root = #vim.tbl_filter(function(r) return r ~= root end, vim.tbl_keys(c.active)) == 0
+vim.api.nvim_set_current_win(code)
+vim.wait(100, function() return false end)   -- the scheduled WinLeave handler runs here
+sticky.survived_leaving = panel.is_open()
+vim.cmd("CompanionPanel")
+panel.jump()
+vim.wait(100, function() return false end)
+sticky.survived_jump = panel.is_open() and vim.api.nvim_get_current_win() ~= vim.fn.win_getid(vim.fn.bufwinnr("companion://panel"))
+vim.cmd("CompanionPanelStick")
+sticky.unstick_closed = not panel.is_open()
+
+vim.fn.writefile({ vim.json.encode({
+  unasked = unasked, opened = opened, closed = closed, statusline = statusline, sticky = sticky,
+  unobserved = unobserved,
+}) }, vim.env.PANEL_STATE)
 c.stop(root)
 """
 
@@ -225,13 +273,21 @@ vim.cmd("filetype on")
 vim.cmd("edit " .. vim.fn.fnameescape(root .. "/client.py"))
 c.start(root)
 local ns = vim.api.nvim_create_namespace("fake-lsp")
+-- One mistake, reported twice, the way basedpyright reports `add(1, 2)` against a changed add():
+-- a call-level message several lines long, and an argument-level one inside its range.
 vim.diagnostic.set(ns, 0, { {
-  lnum = 3, col = 4, end_lnum = 3, end_col = 12,
+  lnum = 3, col = 10, end_lnum = 3, end_col = 19,
   severity = vim.diagnostic.severity.ERROR,
   message = 'No overloads for "add" match the provided arguments\n'
          .. '  Argument of type "Literal[2]" cannot be assigned to parameter "carry"\n'
          .. '    "Literal[2]" is not assignable to "str | None"',
   code = "reportCallIssue", source = "basedpyright",
+}, {
+  lnum = 3, col = 17, end_lnum = 3, end_col = 18,
+  severity = vim.diagnostic.severity.ERROR,
+  message = 'Argument of type "Literal[2]" cannot be assigned to parameter "carry" of type '
+         .. '"str | None" in function "add"',
+  code = "reportArgumentType", source = "basedpyright",
 } })
 vim.wait(6000, function()
   for _, f in ipairs(require("companion.findings").findings.errors or {}) do
@@ -246,38 +302,83 @@ vim.fn.writefile(vim.api.nvim_buf_get_lines(buf, 0, -1, false), vim.env.PANEL_OU
 
 
 def check_panel_survives_multiline_diagnostics(root):
+    """Two basedpyright messages about one call, one of them several lines long: drawn without
+    raising, as one problem, said as one sentence."""
     out = OUT / "panel-multiline.txt"
     log = run_nvim("nvim-panel-multiline", MULTILINE_DIAG, root, env={"PANEL_OUT": str(out)})
     broke = "nvim_buf_set_lines" in log or "stack traceback" in log
     lines = out.read_text().splitlines() if out.exists() else []
-    shown = next((l for l in lines if "No overloads" in l), "")
+    shown = next((l for l in lines if "add() expects" in l), "")
     check("Panel survives a multi-line diagnostic", not broke and bool(shown),
           shown.strip()[:96] if shown else "panel did not render the diagnostic"
           + (" (nvim_buf_set_lines raised)" if broke else ""))
+    check("One mistake reported twice is one problem",
+          bool(lines) and "2 diagnostics" in lines[0]
+          and sum("add() expects" in l for l in lines) == 1
+          and not any("No overloads" in l or "Argument of type" in l for l in lines),
+          f"{lines[0].strip() if lines else ''!r}, and the row reads {shown.strip()!r}; the "
+          "language server's wording stays behind `d`")
 
 
 def check_panel(root):
-    """One pane, opened on request, rendering live engine state and findings — and handing the
-    cursor straight back, because a pane that steals focus is a pane that interrupts."""
-    out = OUT / "panel.txt"
-    state_file, closed_file = OUT / "panel-state.json", OUT / "panel-closed.json"
+    """The quick-help panel: one line per problem, the problem on ↵, its paperwork on d, engine
+    metadata elsewhere. It opens only on request; having been asked for, it takes focus, because
+    its keys act inside it, and gives the cursor back when it closes."""
+    paths = {k: OUT / f"panel-{k}.txt" for k in ("compact", "detail", "raw", "info")}
+    state_file = OUT / "panel-state.json"
     run_nvim("nvim-panel", PANEL, root,
-             env={"PANEL_OUT": str(out), "PANEL_STATE": str(state_file),
-                  "PANEL_CLOSED": str(closed_file)})
-    lines = out.read_text().splitlines()
+             env={"PANEL_OUT": str(paths["compact"]), "PANEL_DETAIL": str(paths["detail"]),
+                  "PANEL_RAW": str(paths["raw"]), "PANEL_INFO": str(paths["info"]),
+                  "PANEL_STATE": str(state_file)})
+    lines = paths["compact"].read_text().splitlines()
+    detail = paths["detail"].read_text().splitlines()
+    raw = paths["raw"].read_text().splitlines()
+    info = [l.strip() for l in paths["info"].read_text().splitlines()]
     state = json.loads(state_file.read_text())
-    text = "\n".join(lines)
-    header = {k: any(l.startswith(k) for l in lines)
+
+    first = lines[0].strip() if lines else ""
+    metadata = [l for l in lines if any(m in l for m in ("pid ", "seq ", "qmd", "passage(s)"))]
+    check("Panel leads with a count, not engine metadata",
+          first.split(" ")[0].isdigit() and not metadata,
+          f"first line {first!r}; engine fields drawn: {len(metadata)}")
+    caller = next((l for l in lines if "client.py:4" in l), "")
+    check("Panel shows the unsaved caller finding", "unsaved" in caller,
+          " ".join(caller.split()) or "no caller row drawn")
+    excerpt = next((l for l in detail if "return add(1, 2)" in l), "")
+    check("Inspecting opens one problem", len(detail) > len(lines) and bool(excerpt),
+          f"↵ grew the panel from {len(lines)} to {len(detail)} lines, "
+          f"showing the call site's code {excerpt.strip()!r}")
+    labels = ("source", "basis", "buffer")
+    check("Provenance only on request",
+          not any(l.strip().startswith(labels) for l in lines + detail)
+          and all(any(l.strip().startswith(k) for l in raw) for k in labels),
+          "absent from the list and the inspected problem; d adds source, basis and buffer")
+    fields = {k: any(l.startswith(k) for l in info)
               for k in ("engine", "buffer", "model", "context", "unsaved")}
-    check("Panel renders engine state", all(header.values()) and "CALLERS" in text,
-          "header fields drawn: " + ", ".join(sorted(k for k, v in header.items() if v)))
-    check("Panel shows the unsaved caller finding",
-          any("[buffer]" in l for l in lines) and any("client.py:4" in l for l in lines),
-          next((l.strip() for l in lines if "client.py:4" in l), "no caller line drawn"))
-    check("Panel opens without stealing focus", state["opened"] and state["kept_focus"],
-          f"{state['windows']} windows open; the cursor stayed in the code window")
-    check("Panel toggles closed", json.loads(closed_file.read_text())["closed"],
-          ":CompanionPanel a second time closes it")
+    check("Engine metadata lives in :CompanionInfo", all(fields.values()),
+          "fields drawn: " + ", ".join(sorted(k for k, v in fields.items() if v)))
+    opened, closed = state["opened"], state["closed"]
+    check("Panel opens only when asked, as a focused float",
+          state["unasked"] and opened["open"] and opened["float"] and opened["focused"],
+          "no window appeared while findings arrived; :CompanionPanel opened a float and "
+          "moved the cursor into it")
+    check("Closing the panel gives the cursor back",
+          closed["closed"] and closed["back"] and closed["toggled"],
+          "q closed it and returned to the code window; :CompanionPanel twice toggles it")
+    unobserved = state["unobserved"]
+    check("Before :CompanionStart the panel says it is not observing",
+          any("not observing" in l for l in unobserved)
+          and not any("engine" in l or "problem" in l for l in unobserved),
+          " / ".join(l.strip() for l in unobserved if l.strip()))
+    sticky = state["sticky"]
+    check("A sticky panel stays in view",
+          all(sticky.get(k) for k in ("opened", "stayed_in_code", "entered", "no_pseudo_root",
+                                      "survived_leaving", "survived_jump", "unstick_closed")),
+          ":CompanionPanelStick opened it without taking the cursor; it survived leaving and a "
+          "jump; unsticking closed it — " + json.dumps(sticky))
+    check("Statusline carries the count",
+          state["statusline"].startswith("◉") and any(ch.isdigit() for ch in state["statusline"]),
+          repr(state["statusline"]))
 
 
 def nvim(root, save):

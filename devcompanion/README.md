@@ -2,7 +2,8 @@
 
 A passive development companion. You keep coding; it watches the buffer you are typing in,
 snapshots what changed, detects what that change means, runs cheap investigations (callers,
-tests), and keeps one side pane current. Nothing pops. Nothing asks for approval.
+tests), and keeps a short list current: a count in the statusline, the list itself on request.
+Nothing pops. Nothing asks for approval.
 
 The distinguishing choice: **it analyses unsaved buffers**. While you are typing, the file on
 disk is stale, and the interesting content is the one the file does not have yet. So each path
@@ -31,7 +32,8 @@ unavailable, timeout, or garbage output all degrade to the deterministic board.
 - Present evidence from a tool that could not see your buffer without saying so. pytest reads
   the working tree, so its results are labelled saved-revision-only and are not run for
   buffer-only content.
-- Open, focus, or interrupt. The pane opens on `:CompanionPanel` and hands the cursor back.
+- Open, focus, or interrupt on its own. At rest it is a count in the statusline; the panel
+  opens on `:CompanionPanel` and closes back to the window you were in.
 - Write to your files. Only `.companion/`.
 
 ## Try it
