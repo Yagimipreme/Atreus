@@ -145,7 +145,20 @@ local function ensure_buffer()
   return buf
 end
 
+-- nvim_buf_set_lines raises on a string containing a newline, which would take down the whole
+-- pane. The engine flattens its fields, but this is a rendering boundary and it must hold
+-- whatever it is handed: a pane that shows an awkward line is a nuisance, a pane that throws is
+-- a broken tool. Belt and braces on purpose.
+local function flatten(s)
+  return (tostring(s):gsub("%s+", " "))
+end
+
 local function set_lines(buf, lines)
+  for i, l in ipairs(lines) do
+    if l:find("[\r\n]") then
+      lines[i] = flatten(l)
+    end
+  end
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false

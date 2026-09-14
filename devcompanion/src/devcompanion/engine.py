@@ -330,12 +330,18 @@ class Engine:
             details["unsaved_inputs"] = ", ".join(sorted(unsaved))
         evd = Evidence(key, t.kind, t.detail or sig.render(), claim, based,
                        [asdict(s) for s in sites], details, seq=t.seq)
-        # Per save, not per keystroke pause. A warm request is ~1.66 s against a 400 ms debounce,
-        # so calls made while typing would queue behind each other and land describing drafts the
-        # developer has already moved past. Deterministic findings stay immediate either way;
-        # the model only ever appends a sentence to a claim that is already on the board.
+        # Ask the model only about a claim it has not already answered. Two gates, because one
+        # is not enough:
+        #
+        #   origin != editor  -- an unsaved draft is still being typed, and a sentence about it
+        #                        would arrive describing code the developer has moved past.
+        #   fingerprint       -- the claim's identity. Re-deriving the same claim reuses the
+        #                        sentence instead of re-asking. This is what carries the cost,
+        #                        because an editor that writes on a timer turns every pause into
+        #                        a save, and the origin gate alone would then buy nothing at all.
         if self.llm and sites and n_break and origin != "editor":
-            evd.suggestion = self._suggest(evd)
+            prior = self.evid.suggestion_for(evd.key, evd.fingerprint)
+            evd.suggestion = prior if prior else self._suggest(evd)
         r = self.evid.add(evd)
         self.log(f"  {t.kind} [{r}]: {evd.title}: {claim}")
 

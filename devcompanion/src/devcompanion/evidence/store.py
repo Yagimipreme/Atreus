@@ -71,6 +71,18 @@ class EvidenceStore:
         self._persist()
         return "updated" if cur else "new"
 
+    def suggestion_for(self, key: str, fingerprint: str) -> str | None:
+        """The sentence already held for this exact claim, if there is one.
+
+        Lets a caller skip re-asking the model for something it has already answered. The
+        fingerprint is the identity of the claim, so a match means the call sites and the
+        revision they rest on are unchanged and the old sentence is still the right one.
+        """
+        cur = self.state.get(key)
+        if cur and cur["fingerprint"] == fingerprint:
+            return cur.get("suggestion")
+        return None
+
     def mark_stale(self, path: str, new_sha: str) -> list[dict]:
         """Any fresh record that depended on `path` at a different sha is now stale.
         Per-file status records (noop/unknown_intent/cancelled) are simply dropped: the new

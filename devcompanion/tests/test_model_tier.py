@@ -159,3 +159,35 @@ def test_a_transient_model_failure_does_not_suppress_the_sentence_forever(projec
         assert rec["suggestion"] == "Pass carry at both call sites."
     finally:
         stop(revived)
+
+
+def test_re_deriving_the_same_claim_does_not_re_ask_the_model(project):
+    """An editor that writes on a timer turns every keystroke pause into a save. Gating on
+    saves alone would then call the model once a second; the claim's fingerprint is what
+    actually bounds the cost."""
+    eng, root, srv = project
+    (root / "calc.py").write_text(TYPED)
+    eng.handle_event(Event(kind="buffer_saved", path="calc.py"))
+    eng.sched.drain(wait=False)
+    assert len(srv.requests) == 1
+    sentence = eng.evid.state["signature_change:calc.py:add"]["suggestion"]
+
+    for _ in range(5):                       # five more saves, same claim every time
+        (root / "notes.py").write_text(f"# add is fine {_}\n")
+        eng.handle_event(Event(kind="buffer_saved", path="notes.py"))
+        eng.sched.drain(wait=False)
+
+    assert len(srv.requests) == 1, "the claim never changed, so there was nothing new to ask"
+    assert eng.evid.state["signature_change:calc.py:add"]["suggestion"] == sentence
+
+
+def test_a_changed_claim_does_ask_again(project):
+    eng, root, srv = project
+    (root / "calc.py").write_text(TYPED)
+    eng.handle_event(Event(kind="buffer_saved", path="calc.py"))
+    eng.sched.drain(wait=False)
+    srv.reply = "Now only one site is left."
+    (root / "client.py").write_text(CLIENT.replace("add(1, 2)", "add(1, 2, 0)\n    add(3, 4)"))
+    eng.handle_event(Event(kind="buffer_saved", path="client.py"))
+    eng.sched.drain(wait=False)
+    assert len(srv.requests) == 2, "the call sites changed, so the claim did too"

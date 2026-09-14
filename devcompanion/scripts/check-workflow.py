@@ -215,6 +215,47 @@ def check_announce_on_start(root):
           f"clean one seeds the baseline, and buffers outside the workspace are skipped")
 
 
+# A language server message is routinely several lines. Neovim refuses to set a buffer line
+# containing a newline, so an unflattened field does not render badly -- it raises inside the
+# transport callback and the pane dies on every republish. This is that case, end to end.
+MULTILINE_DIAG = r"""local root = vim.env.COMPANION_TEST_ROOT
+local c = require("companion")
+c.setup({debounce={text=100, diagnostics=100}, transport={poll_ms=50}})
+vim.cmd("filetype on")
+vim.cmd("edit " .. vim.fn.fnameescape(root .. "/client.py"))
+c.start(root)
+local ns = vim.api.nvim_create_namespace("fake-lsp")
+vim.diagnostic.set(ns, 0, { {
+  lnum = 3, col = 4, end_lnum = 3, end_col = 12,
+  severity = vim.diagnostic.severity.ERROR,
+  message = 'No overloads for "add" match the provided arguments\n'
+         .. '  Argument of type "Literal[2]" cannot be assigned to parameter "carry"\n'
+         .. '    "Literal[2]" is not assignable to "str | None"',
+  code = "reportCallIssue", source = "basedpyright",
+} })
+vim.wait(6000, function()
+  for _, f in ipairs(require("companion.findings").findings.errors or {}) do
+    if f.kind == "diagnostic_context" then return true end
+  end
+  return false
+end, 50)
+vim.cmd("CompanionPanel")
+local buf = vim.fn.bufnr("companion://panel")
+vim.fn.writefile(vim.api.nvim_buf_get_lines(buf, 0, -1, false), vim.env.PANEL_OUT)
+"""
+
+
+def check_panel_survives_multiline_diagnostics(root):
+    out = OUT / "panel-multiline.txt"
+    log = run_nvim("nvim-panel-multiline", MULTILINE_DIAG, root, env={"PANEL_OUT": str(out)})
+    broke = "nvim_buf_set_lines" in log or "stack traceback" in log
+    lines = out.read_text().splitlines() if out.exists() else []
+    shown = next((l for l in lines if "No overloads" in l), "")
+    check("Panel survives a multi-line diagnostic", not broke and bool(shown),
+          shown.strip()[:96] if shown else "panel did not render the diagnostic"
+          + (" (nvim_buf_set_lines raised)" if broke else ""))
+
+
 def check_panel(root):
     """One pane, opened on request, rendering live engine state and findings — and handing the
     cursor straight back, because a pane that steals focus is a pane that interrupts."""
@@ -415,6 +456,7 @@ def main():
                   f"{len(callers_now)} caller_affected finding(s), each marked as resting on "
                   f"buffer content")
             check_panel(live)
+            check_panel_survives_multiline_diagnostics(live)
 
             nvim(live, save=True)
             ready = poll(lambda: signature(live).get("claim", "").startswith("2 call site") and records(live).get("test_run:calc.py:-", {}).get("claim", "").startswith("failed:"))

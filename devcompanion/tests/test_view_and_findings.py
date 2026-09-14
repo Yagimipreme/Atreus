@@ -228,3 +228,39 @@ def test_concurrent_writers_to_the_same_path_never_collide(tmp_path):
     content = path.read_text()
     assert content == content[0] * len(content), "the file must hold one writer's content whole, not a mix"
     assert list(tmp_path.glob("engine.json.*.tmp")) == []
+
+
+# ---------------------------------------------------------------- single-line fields
+
+MULTILINE = ('No overloads for "split" match the provided arguments\n'
+             '  Argument of type "Literal[3]" cannot be assigned to parameter "sep"\n'
+             '    "Literal[3]" is not assignable to "str | None"\n')
+
+
+def test_no_published_field_ever_contains_a_newline():
+    """Neovim refuses to set a buffer line containing a newline, so a multi-line field does not
+    render badly — it raises and takes the pane down. Found in live use: basedpyright sends a
+    four-line message and the panel died on every republish."""
+    diags = {"calc.py": [{"line": 8, "col": 5, "severity": "error",
+                          "message": MULTILINE, "code": "reportCallIssue", "source": "basedpyright"}]}
+    rec = {**RECORD, "suggestion": "Add the parameter.\n\nThen update both call sites.",
+           "kind": "test_run", "claim": "failed: 1 failed",
+           "details": {"failed": "FAILED a.py::test_one\nFAILED b.py::test_two",
+                       "first_error": "E   TypeError: bad\n    during handling"}}
+    published = (findings_out.from_record(RECORD | {"suggestion": rec["suggestion"]}, MANIFEST)
+                 + findings_out.from_record(rec, MANIFEST)
+                 + findings_out.from_diagnostics(diags, MANIFEST))
+    assert published, "nothing published, so the assertion would be vacuous"
+    for f in published:
+        for key, value in f.items():
+            for text in ([value] if isinstance(value, str) else
+                         [e.get("detail", "") for e in value] if key == "evidence" else []):
+                assert "\n" not in text and "\r" not in text, f"{f['kind']}.{key}: {text!r}"
+
+
+def test_flattening_keeps_the_content_readable():
+    assert findings_out.line(MULTILINE).startswith('No overloads for "split" match')
+    assert "Argument of type" in findings_out.line(MULTILINE)
+    assert findings_out.line("  spaced   out \n\n text ") == "spaced out text"
+    assert findings_out.line(None) == ""
+    assert len(findings_out.line("x" * 500)) == 300

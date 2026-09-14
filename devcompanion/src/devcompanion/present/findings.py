@@ -26,6 +26,18 @@ MAX_DIAGNOSTICS = 20
 BASIS = {"breaks": "observed", "unsure": "inferred"}
 
 
+def line(text: object, limit: int = 300) -> str:
+    """One line, always. A finding field is rendered as a single row in the editor, and Neovim
+    refuses to set a buffer line containing a newline at all — so a multi-line value does not
+    render badly, it raises and takes the whole pane down with it.
+
+    Language servers routinely send several lines (basedpyright's "no overloads" explains each
+    candidate on its own line) and a model sentence can wrap. Both are legitimate; flattening is
+    this boundary's job, not the adapter's.
+    """
+    return " ".join(str(text or "").split())[:limit]
+
+
 def _id(*parts: object) -> str:
     return "f-" + hashlib.sha1("|".join(str(p) for p in parts).encode()).hexdigest()[:10]
 
@@ -47,11 +59,12 @@ def from_record(rec: dict, manifest: dict) -> list[dict]:
                 "id": _id(rec["key"], loc["path"], loc["line"]),
                 "kind": "caller_affected",
                 "surface": "callers",
-                "title": rec["title"],
+                "title": line(rec["title"], 200),
                 "basis": "outdated" if stale else BASIS[loc["verdict"]],
                 "location": {"path": loc["path"], "line": loc["line"], "col": loc["col"]},
-                "consequence": loc["reason"],
-                "evidence": [{"kind": "snapshot", "ref": loc["file_sha"], "detail": loc["text"]}],
+                "consequence": line(loc["reason"], 200),
+                "evidence": [{"kind": "snapshot", "ref": loc["file_sha"],
+                              "detail": line(loc["text"], 200)}],
                 "action": None,
                 "depends_on": rec["based_on"],
                 "revision": _revision(rec["based_on"], manifest),
@@ -60,7 +73,7 @@ def from_record(rec: dict, manifest: dict) -> list[dict]:
             })
         if rec.get("suggestion") and out:
             out[0]["evidence"].append({"kind": "model", "ref": "suggestion",
-                                       "detail": rec["suggestion"]})
+                                       "detail": line(rec["suggestion"])})
     elif kind == "test_run":
         status = rec["claim"].split(":", 1)[0]
         details = rec.get("details", {})
@@ -69,11 +82,11 @@ def from_record(rec: dict, manifest: dict) -> list[dict]:
             "id": _id(rec["key"]),
             "kind": "test_result",
             "surface": "errors",
-            "title": rec["title"],
+            "title": line(rec["title"], 200),
             "basis": "outdated" if stale else "observed",
             "scope": sorted(p for p in rec["based_on"] if p.endswith(".py")),
-            "consequence": rec["claim"],
-            "evidence": [{"kind": "test", "ref": status, "detail": v}
+            "consequence": line(rec["claim"], 200),
+            "evidence": [{"kind": "test", "ref": status, "detail": line(v)}
                          for v in (details.get("failed"), details.get("first_error")) if v],
             "action": None,
             "depends_on": rec["based_on"],
@@ -98,13 +111,13 @@ def from_diagnostics(diagnostics: dict[str, list[dict]], manifest: dict) -> list
                 "id": _id("diag", path, d.get("line"), d.get("col"), d.get("message")),
                 "kind": "diagnostic_context",
                 "surface": "errors",
-                "title": d.get("message", "").splitlines()[0][:160],
+                "title": line(d.get("message"), 160),
                 "basis": "observed",
                 "location": {"path": path, "line": d.get("line"), "col": d.get("col")},
-                "consequence": f"{d.get('source') or 'language server'}"
-                               + (f" {d['code']}" if d.get("code") else ""),
+                "consequence": line(f"{d.get('source') or 'language server'}"
+                                   + (f" {d['code']}" if d.get("code") else ""), 200),
                 "evidence": [{"kind": "diagnostic", "ref": d.get("code") or "-",
-                              "detail": d.get("message", "")[:300]}],
+                              "detail": line(d.get("message"))}],
                 "action": None,
                 "depends_on": {p: r["sha"] for p, r in manifest.items() if p == path},
                 "revision": {path: manifest.get(path, {}).get("origin", "disk")},
