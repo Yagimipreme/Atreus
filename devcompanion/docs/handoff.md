@@ -48,8 +48,8 @@ Built:
   provenance (source, every raw diagnostic, basis, buffer). The footer lists only keys that do
   something. Having been asked for, it takes focus, because its keys act inside it, and returns
   the cursor when it closes. That reverses the earlier "hands the cursor back on open" rule; the
-  contract's rendering rules say so. Sticky mode (`ui.sticky`, `:CompanionPanelStick`, `s`)
-  keeps it open on leaving and after a jump.
+  contract's rendering rules say so. Pinned mode (`ui.pinned`, `:CompanionPanelPin`, `p`; it
+  was called sticky until the polish below) keeps it open on leaving and after a jump.
 - **Metadata: `:CompanionInfo`** (`info.lua`), everything the old header had plus intake and
   adapter counters. `:CompanionStatus` opens the same view.
 - **Problems, not diagnostics** (`present/problems.py`, engine side). Each language-server
@@ -73,12 +73,12 @@ Found and fixed on the way, by using the panel in a real editor:
   caught it because every scenario opens its files before `:CompanionStart`.
 - **Diagnostics that settled before `:CompanionStart` were never sent**, so the panel stayed
   empty until the next edit. `collect.announce_open_buffers` now sends them with the buffer.
-- A `QuitPre` handler written for sticky mode made `:qa!` hang with the panel open. Neovim 0.12
+- A `QuitPre` handler written for pinned mode (then called sticky) made `:qa!` hang with the panel open. Neovim 0.12
   does not need it; it is gone. The harness caught this one.
-- **`:CompanionStart` run with the sticky panel focused observed a workspace called
+- **`:CompanionStart` run with the pinned panel focused observed a workspace called
   `companion:/`.** The root was derived from the current buffer's name, and `companion://panel`
   reads as a path. That editor then watched nothing real, and the panel said "no problems" and
-  "engine stopped" over an empty store. Found by the user on first live use of sticky mode.
+  "engine stopped" over an empty store. Found by the user on first live use of pinned mode (then called sticky).
   `util.workspace_root` now refuses URI-like names; commands fall back to the panel's workspace
   or the observed one; and a panel opened on an unobserved workspace says `not observing this
   workspace · :CompanionStart` instead of describing an empty store. Both are harness rows.
@@ -94,6 +94,32 @@ Not built, and what each waits on:
 
 Pick-up note: an engine started before this pass publishes the old finding shape. The adapter
 still renders it, but grouping, facts and test counts appear only after the engine restarts.
+
+### Polish (same day)
+
+The user's direction after living with it: polish, not redesign. Done:
+
+- **Richer sentences** (`problems.py`). A None operand is `possible None used with +`, an
+  optional argument `possible None passed to authenticate()`, a return mismatch `returns str,
+  expected bool`, plus attribute access on None, subscripting, calling and iterating None, and
+  module attributes. Missing arguments and unresolved imports report what is `missing`.
+- **One vocabulary for facts.** What the code has (`got`, `found`, `returned`, `missing`) in
+  red, what it needs (`expected`, `required`) in green, where (`operator`, `with`, `parameter`,
+  `module`, …) plain, always in one order under an opened problem, so the block reads the same
+  for every kind of mistake. The user asked for this to become the companion's visual language.
+- **The offending range in the code.** Diagnostic locations now carry `end_line`/`end_col`; the
+  excerpt is Tree-sitter highlighted with the range (the `3` in `split(3)`) in red on top.
+- **A calmer selection.** A `CursorLine` background on the selected problem's two-line head, a
+  `▸`/`▼` marker, and the terminal cursor hidden while the panel has focus (a cursor highlight
+  with `blend=100`; verified in the TUI through tmux's cursor flag before relying on it).
+- **Pinned, not sticky.** `ui.pinned`, `:CompanionPanelPin`, `p`, and a 📌 in the title.
+- **Collapsed problems are exactly two lines**; the sentence is cut only when it cannot fit,
+  and given whole once opened.
+- **Linked to the code.** While pinned, moving the code cursor onto a problem's line opens it
+  in the panel and moving off restores what was open before; a problem opened by hand is only
+  selected, never taken away. While the panel has focus, the selected problem's range is marked
+  in the code. Nothing moves the cursor except `↵`. The first version of following did not
+  remember what it replaced, and the harness caught it.
 
 ## User direction
 
@@ -214,7 +240,7 @@ now: it has no LSP question to ask. The adapter already tails it.
 The harness is [scripts/check-workflow.py](../scripts/check-workflow.py). It uses real CLI
 execution, the real engine, real pytest, and real headless Neovim.
 
-Latest documented result: **51 checks passed; 0 failed; 0 gaps.** Plus 102 unit tests.
+Latest documented result: **53 checks passed; 0 failed; 0 gaps.** Plus 107 unit tests.
 
 ```bash
 uv run pytest -q
@@ -232,7 +258,11 @@ Beyond the previously passing saved-file workflow, the harness now establishes:
 - `findings.jsonl` and `engine.json` are written, with per-input revision origins.
 - The panel leads with a problem count and keeps engine metadata out (that is
   `:CompanionInfo`); `↵` inspects one problem, `d` adds provenance; it opens only on request,
-  takes focus, gives the cursor back on close, and a sticky panel survives leaving and a jump.
+  takes focus, gives the cursor back on close, and a pinned panel survives leaving and a jump.
+- A pinned panel is linked to the code both ways: the problem on the code cursor's line opens in
+  the panel and moving off restores what was open, and the problem selected in the panel is
+  marked in the code until the panel loses focus. The terminal cursor hides inside the panel and
+  comes back exactly on leaving it.
 - Two language-server messages about one mistake, one of them multi-line, draw as one problem
   with one sentence; the statusline carries the count.
 - Saving retires the overlay; the same bytes moving from buffer to disk re-runs the tools that

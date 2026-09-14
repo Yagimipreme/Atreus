@@ -174,7 +174,7 @@ adapter renders in file order.
 | `facts` | object | present on `diagnostic_context`: what the sentence names, `{symbol?, expected?, got?, parameter?}`. Every `symbol`, `expected` and `got` appears verbatim in `title`, so the editor can colour it there |
 | `diagnostics` | int | present on `diagnostic_context`: how many language-server messages this one problem stands for; each is in `evidence` |
 | `basis` | string | `observed`, `inferred`, `predicted`, `outdated` |
-| `location` | object | `{path,line,col}` or `{path}` for file scope; required unless `scope` given |
+| `location` | object | `{path,line,col}` or `{path}` for file scope; required unless `scope` given. `diagnostic_context` adds `end_line` and `end_col`, the language server's range, so the editor can mark exactly what is wrong |
 | `scope` | array | paths or symbols, when the finding is not a single point |
 | `consequence` | string | what it means for the developer, one sentence |
 | `evidence` | array | `{kind,ref,detail}` — `kind` is `diagnostic`, `lsp`, `test`, `snapshot`, `doc`, `model` |

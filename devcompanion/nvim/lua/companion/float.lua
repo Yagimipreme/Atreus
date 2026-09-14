@@ -19,14 +19,18 @@ local LINKS = {
   CompanionKey = "Special",
   CompanionIndex = "LineNr",
   CompanionSymbol = "Function",       -- the function or name a problem is about
-  CompanionExpected = "DiagnosticOk", -- what would have fitted
-  CompanionGot = "DiagnosticError",   -- what was there instead
+  CompanionExpected = "DiagnosticOk", -- what the code needs
+  CompanionGot = "DiagnosticError",   -- what the code has instead
+  CompanionSelected = "CursorLine",   -- the selected problem, in place of a cursor
+  CompanionSource = "Visual",         -- the selected problem's range, in the code
 }
 
 function M.highlights()
   for name, link in pairs(LINKS) do
     vim.api.nvim_set_hl(0, name, { link = link, default = true })
   end
+  -- Not a link: a cursor highlight with full blend is how the terminal cursor is hidden.
+  vim.api.nvim_set_hl(0, "CompanionHiddenCursor", { blend = 100, nocombine = true })
 end
 
 M.highlights()
@@ -70,12 +74,13 @@ function Canvas:add(parts)
   return #self.lines
 end
 
--- Highlight a byte range of an existing line (1-based line number), e.g. from Tree-sitter.
-function Canvas:mark(lnum, from, to, group)
+-- Highlight a byte range of an existing line (1-based line number). `priority` decides which of
+-- two overlapping marks shows, e.g. an error range over Tree-sitter's syntax colours.
+function Canvas:mark(lnum, from, to, group, priority)
   local len = #(self.lines[lnum] or "")
   from, to = math.min(from, len), math.min(to, len)
   if from < to then
-    table.insert(self.marks, { lnum - 1, from, to, group })
+    table.insert(self.marks, { lnum - 1, from, to, group, priority })
   end
 end
 
@@ -100,7 +105,7 @@ function M.draw(buf, canvas)
   vim.api.nvim_buf_clear_namespace(buf, M.ns, 0, -1)
   for _, m in ipairs(canvas.marks) do
     if m[1] < #canvas.lines then
-      vim.api.nvim_buf_set_extmark(buf, M.ns, m[1], m[2], { end_col = m[3], hl_group = m[4] })
+      vim.api.nvim_buf_set_extmark(buf, M.ns, m[1], m[2], { end_col = m[3], hl_group = m[4], priority = m[5] })
     end
   end
 end

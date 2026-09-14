@@ -176,29 +176,55 @@ vim.cmd("CompanionInfo")
 vim.fn.writefile(dump("companion://info"), vim.env.PANEL_INFO)
 require("companion.info").close()
 
--- Sticky: opened from the code window without taking the cursor, entered on request, and still
+-- Pinned: opened from the code window without taking the cursor, entered on request, and still
 -- there after the cursor leaves it and after a jump.
 vim.api.nvim_set_current_win(code)
-vim.cmd("CompanionPanelStick")
-local sticky = { opened = panel.is_open(), stayed_in_code = vim.api.nvim_get_current_win() == code }
+vim.cmd("CompanionPanelPin")
+local pinned = { opened = panel.is_open(), stayed_in_code = vim.api.nvim_get_current_win() == code }
 vim.cmd("CompanionPanel")
-sticky.entered = vim.api.nvim_get_current_win() ~= code
+pinned.entered = vim.api.nvim_get_current_win() ~= code
 -- From inside the panel the current buffer is companion://panel. It once resolved to a workspace
 -- called "companion:/", which :CompanionStart then observed instead of the real one.
 vim.cmd("CompanionStart")
-sticky.no_pseudo_root = #vim.tbl_filter(function(r) return r ~= root end, vim.tbl_keys(c.active)) == 0
+pinned.no_pseudo_root = #vim.tbl_filter(function(r) return r ~= root end, vim.tbl_keys(c.active)) == 0
 vim.api.nvim_set_current_win(code)
 vim.wait(100, function() return false end)   -- the scheduled WinLeave handler runs here
-sticky.survived_leaving = panel.is_open()
+pinned.survived_leaving = panel.is_open()
 vim.cmd("CompanionPanel")
 panel.jump()
 vim.wait(100, function() return false end)
-sticky.survived_jump = panel.is_open() and vim.api.nvim_get_current_win() ~= vim.fn.win_getid(vim.fn.bufwinnr("companion://panel"))
-vim.cmd("CompanionPanelStick")
-sticky.unstick_closed = not panel.is_open()
+pinned.survived_jump = panel.is_open() and vim.api.nvim_get_current_win() ~= vim.fn.win_getid(vim.fn.bufwinnr("companion://panel"))
+-- Linked to the code. client.py:4 is still open from the ↵ above. With the panel pinned and the
+-- cursor in the code, the problem on the cursor's line -- tests/test_calc.py:7 -- opens in the
+-- panel while the cursor stays put, and moving off puts back what was open before. Called
+-- directly: a cursor moved by a script raises no CursorMoved.
+local client = vim.fn.bufnr(root .. "/client.py")
+local tests = vim.fn.bufadd(root .. "/tests/test_calc.py")
+vim.fn.bufload(tests)
+local function panel_has(text)
+  return table.concat(dump("companion://panel"), "\n"):find(text, 1, true) ~= nil
+end
+panel.follow(root, tests, 7)
+pinned.follow_opened = panel_has("assert add(1, 2) == 3") and not panel_has("return add(1, 2)")
+  and vim.api.nvim_buf_get_name(0):sub(-9) == "client.py"
+panel.follow(root, tests, 1)
+pinned.follow_closed = not panel_has("assert add(1, 2) == 3") and panel_has("return add(1, 2)")
+-- The other way: the problem selected in the panel is marked in the code, the cursor is hidden
+-- while the panel has focus, and leaving the panel clears the mark and restores the cursor.
+local guicursor = vim.o.guicursor
+local source_ns = vim.api.nvim_get_namespaces()["companion.source"]
+vim.cmd("CompanionPanel")
+pinned.source_marked = #vim.api.nvim_buf_get_extmarks(client, source_ns, 0, -1, {}) > 0
+pinned.cursor_hidden = vim.o.guicursor:find("CompanionHiddenCursor", 1, true) ~= nil
+vim.api.nvim_set_current_win(code)
+vim.wait(100, function() return false end)
+pinned.source_cleared = #vim.api.nvim_buf_get_extmarks(client, source_ns, 0, -1, {}) == 0
+pinned.cursor_restored = vim.o.guicursor == guicursor
+vim.cmd("CompanionPanelPin")
+pinned.unstick_closed = not panel.is_open()
 
 vim.fn.writefile({ vim.json.encode({
-  unasked = unasked, opened = opened, closed = closed, statusline = statusline, sticky = sticky,
+  unasked = unasked, opened = opened, closed = closed, statusline = statusline, pinned = pinned,
   unobserved = unobserved,
 }) }, vim.env.PANEL_STATE)
 c.stop(root)
@@ -370,12 +396,22 @@ def check_panel(root):
           any("not observing" in l for l in unobserved)
           and not any("engine" in l or "problem" in l for l in unobserved),
           " / ".join(l.strip() for l in unobserved if l.strip()))
-    sticky = state["sticky"]
-    check("A sticky panel stays in view",
-          all(sticky.get(k) for k in ("opened", "stayed_in_code", "entered", "no_pseudo_root",
+    pinned = state["pinned"]
+    check("A pinned panel stays in view",
+          all(pinned.get(k) for k in ("opened", "stayed_in_code", "entered", "no_pseudo_root",
                                       "survived_leaving", "survived_jump", "unstick_closed")),
-          ":CompanionPanelStick opened it without taking the cursor; it survived leaving and a "
-          "jump; unsticking closed it — " + json.dumps(sticky))
+          ":CompanionPanelPin opened it without taking the cursor; it survived leaving and a "
+          "jump; unpinning closed it — " + json.dumps(pinned))
+    linked = ("follow_opened", "follow_closed", "source_marked", "source_cleared")
+    check("Pinned panel and code are linked", all(pinned.get(k) for k in linked),
+          "the problem on the code cursor's line opened in the panel with the cursor left in the "
+          "code, and moving off restored the problem that had been open before; the problem "
+          "selected in the panel was marked in the code until the panel lost focus — "
+          + json.dumps({k: pinned.get(k) for k in linked}))
+    check("The cursor hides inside the panel",
+          pinned.get("cursor_hidden") and pinned.get("cursor_restored"),
+          "guicursor carries the hidden-cursor highlight while the panel has focus, and is "
+          "restored exactly when it loses it")
     check("Statusline carries the count",
           state["statusline"].startswith("◉") and any(ch.isdigit() for ch in state["statusline"]),
           repr(state["statusline"]))

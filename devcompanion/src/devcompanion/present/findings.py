@@ -134,7 +134,8 @@ def from_diagnostics(diagnostics: dict[str, list[dict]], manifest: dict) -> list
                 "facts": {k: line(v, 80) for k, v in problem.facts.items()},
                 "diagnostics": len(problem.members),
                 "basis": "observed",
-                "location": {"path": path, "line": lead.get("line"), "col": lead.get("col")},
+                "location": {"path": path, "line": lead.get("line"), "col": lead.get("col"),
+                             "end_line": lead.get("end_line"), "end_col": lead.get("end_col")},
                 "consequence": line(f"{lead.get('source') or 'language server'}"
                                    + (f" {lead['code']}" if lead.get("code") else ""), 200),
                 "evidence": [{"kind": "diagnostic", "ref": d.get("code") or "-",

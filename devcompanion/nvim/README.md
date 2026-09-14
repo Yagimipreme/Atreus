@@ -62,11 +62,11 @@ as a LazyVim spec:
 
 `:CompanionPanel` opens a float at the right edge of the editor. It does not split the layout.
 
-**One line per problem, one inspected problem at a time, raw diagnostics only on request.**
+**One problem is two lines, one inspected problem at a time, raw diagnostics only on request.**
 
 ```
-╭ companion ───────────────────────────────────╮
-│ 3 problems · 4 diagnostics        ✓ 71 tests │
+╭ companion 📌 ────────────────────────────────╮
+│ 3 problems · 5 diagnostics        ✓ 71 tests │
 │                                              │
 │ ▸ C  client.py:4                     unsaved │
 │      missing required 'carry'                │
@@ -77,25 +77,44 @@ as a LazyVim spec:
 │      test_string.split(3)                    │
 │                        ^                     │
 │                                              │
-│      got       int                           │
-│      expected  str | None                    │
-│      parameter sep                           │
+│      got        int                          │
+│      expected   str | None                   │
+│      parameter  sep                          │
 │                                              │
-│   E  test.py:10                              │
-│      incomplete import statement             │
+│   E  test.py:12                              │
+│      possible None used with +               │
 ╰─────────────────── ↵ go to  d raw  q close ╯
 ```
 
 A problem is not a diagnostic. basedpyright reports `test_string.split(3)` twice, once as "No
 overloads for split" and once as "Argument of type Literal[3] cannot be assigned to parameter
-sep", and an unfinished `from` import twice more. The engine groups those four messages into two
-problems and says each as a sentence (`../src/devcompanion/present/problems.py`); the header
-says how many messages the count stands for. Sentences wrap; nothing is cut off.
+sep". The engine groups messages about one mistake into one problem and says it as a sentence
+(`../src/devcompanion/present/problems.py`); the header's dimmed `· 5 diagnostics` says how many
+machine messages the count stands for.
 
-Colour is spent where the eye should go, not on whole lines: the symbol in function colour, what
-was there instead (`int`) in red, what would have fitted (`str | None`) in green, the place in
-directory colour, the code excerpt through Tree-sitter when its parser is installed. The rest
-is plain, and provenance is dimmed.
+A collapsed problem is always two lines: where, and one sentence, cut with `…` in the rare case
+it does not fit. Everything else belongs to the opened problem.
+
+**What the code has against what it needs.** An opened problem shows a small block in one
+vocabulary, so it reads the same for every kind of mistake:
+
+| label | colour | means |
+|---|---|---|
+| `got` `found` `returned` `missing` | red | what the code has |
+| `expected` `required` | green | what it needs |
+| `operator` `with` `left` `right` `parameter` `argument` `module` `defined in` | plain | where |
+| `function` | function | the name involved |
+
+```
+got        int                 found      None
+expected   str | None          operator   +
+parameter  sep                 with       int
+```
+
+Colour is spent where the eye should go, not on whole lines: in the sentence, the symbol in
+function colour, what the code has in red, what it needs in green. The code excerpt is
+syntax-highlighted by Tree-sitter when its parser is installed, with the problem's own range —
+the `3` in `split(3)` — in red on top. Provenance is dimmed and only shown on `d`.
 
 | | |
 |---|---|
@@ -111,16 +130,19 @@ inferred last. A green test run is not a problem; it is `✓ 71 tests` in the he
 
 | key | |
 |---|---|
-| `↵` | inspect: the code with a caret, got and expected, what changed, a likely fix when a model offered one. On the inspected problem, go to it |
+| `↵` | inspect: the code, the block above, what changed, a likely fix when a model offered one. On the inspected problem, go to it |
 | `d` | raw: source, every diagnostic in the language server's own words, basis, buffer |
 | `j` `k` | next and previous problem |
-| `s` | stick or unstick |
+| `p` | pin or unpin |
 | `r` | redraw |
 | `<Esc>` | put the inspected problem away, or close |
 | `q` | close |
 
 The footer shows only the keys that do something where the cursor is. There is no `f fix`
 until the engine can propose one.
+
+The selected problem has a quiet background and a `▸` (`▼` when opened), and the terminal cursor
+is hidden while the panel has focus, so the selection is the only thing marking where you are.
 
 Having been asked for, the panel takes focus, because its keys act inside it. It closes on `q`,
 a jump, or leaving its window, and hands the cursor back to the window it was opened from. It
@@ -130,13 +152,18 @@ means: `engine not running`, `engine stopped · showing its last results`, `engi
 observing this workspace · :CompanionStart`, because nothing in the editor has read that
 workspace's findings.
 
+**Pinned.** With `ui.pinned = true`, or `:CompanionPanelPin` / `p` for the session, the panel
+stays open when the cursor leaves it and after a jump, and its title carries a 📌. Pinning a
+closed panel opens it without taking the cursor. `:CompanionPanel` from the code window then
+moves into it, and from inside it closes it. Unpinning a panel the cursor is not in closes it.
+
+**Linked to the code.** While the panel is pinned and you are coding, moving the cursor onto a
+line with a problem opens that problem in the panel; moving off puts it away. While the panel
+has focus, the selected problem's range is highlighted in the code. Neither moves your cursor;
+only `↵` does.
+
 Commands take their workspace from the current file. From the panel, a terminal or a file tree
 they use the panel's workspace or the one already observed, never the buffer's name.
-
-**Sticky.** With `ui.sticky = true`, or `:CompanionPanelStick` / `s` for the session, the panel
-stays open when the cursor leaves it and after a jump, and its title says `· sticky`. Sticking a
-closed panel opens it without taking the cursor. `:CompanionPanel` from the code window then
-moves into it, and from inside it closes it. Unsticking a panel the cursor is not in closes it.
 
 `:CompanionErrors` and `:CompanionCallers` are the same panel, filtered.
 
@@ -163,7 +190,7 @@ no rule knows keeps its first line.
 | `:CompanionStart` | begin observing the current workspace |
 | `:CompanionStop` | stop observing |
 | `:CompanionPanel` | open the panel, move into it, or close it from inside |
-| `:CompanionPanelStick` | toggle whether the panel stays open |
+| `:CompanionPanelPin` | pin or unpin the panel |
 | `:CompanionErrors` | open the panel, errors only |
 | `:CompanionCallers` | open the panel, affected callers only |
 | `:CompanionInfo` | engine and adapter internals |
@@ -172,7 +199,7 @@ no rule knows keeps its first line.
 
 ## Highlights
 
-All are `default` links, so a colourscheme can override any of them:
+All but one are `default` links, so a colourscheme can override any of them:
 
 | group | links to | used for |
 |---|---|---|
@@ -181,12 +208,15 @@ All are `default` links, so a colourscheme can override any of them:
 | `CompanionWarn` | DiagnosticWarn | `?`, engine notices |
 | `CompanionOk` | DiagnosticOk | `✓ tests`, `no problems` |
 | `CompanionSymbol` | Function | the function or name a problem is about |
-| `CompanionGot` | DiagnosticError | what was there instead, and the caret |
-| `CompanionExpected` | DiagnosticOk | what would have fitted |
+| `CompanionGot` | DiagnosticError | what the code has, its range in the excerpt, the caret |
+| `CompanionExpected` | DiagnosticOk | what the code needs |
 | `CompanionLocation` | Directory | `test.py:8` |
-| `CompanionMuted` | Comment | tags, labels, provenance |
+| `CompanionMuted` | Comment | labels, tags, the diagnostic count, provenance |
 | `CompanionKey` | Special | the selection marker, footer keys |
+| `CompanionSelected` | CursorLine | the selected problem's two-line head |
+| `CompanionSource` | Visual | the selected problem's range in the code |
 | `CompanionIndex` | LineNr | reserved |
+| `CompanionHiddenCursor` | (`blend=100`) | hides the terminal cursor inside the panel |
 
 ## Module map
 
@@ -199,7 +229,7 @@ All are `default` links, so a colourscheme can override any of them:
 | `lua/companion/transport.lua` | 2 | the only module that knows how the engine is reached |
 | `lua/companion/findings.lua` | 3a | the last published findings and engine status; what counts as a problem, ordering, staleness, liveness |
 | `lua/companion/float.lua` | 3 | highlight groups, lines with highlights, width-aware cutting and wrapping, floats |
-| `lua/companion/panel.lua` | 3b | the panel |
+| `lua/companion/panel.lua` | 3b | the panel, and its link to the code |
 | `lua/companion/info.lua` | 3c | `:CompanionInfo` |
 | `lua/companion/init.lua` | wiring | public API, statusline |
 
@@ -219,5 +249,5 @@ fake engine, and prints the events emitted and the panel drawn.
 Neovim against a real engine, and asserts that the adapter and the engine hash buffers
 identically, that two messages about one mistake draw as one problem, that the panel leads with
 a count and keeps engine metadata out, that ↵ inspects and d adds provenance, that it opens only
-on request and gives the cursor back, that a sticky panel stays, and that the statusline carries
-the count.
+on request and gives the cursor back, that a pinned panel stays and is linked to the code both
+ways, that the cursor hides inside it, and that the statusline carries the count.

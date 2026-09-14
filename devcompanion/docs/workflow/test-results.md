@@ -1,6 +1,6 @@
 # devcompanion workflow check — 2026-09-14
 
-**51 checks passed; 0 failed; 0 integration gaps reproduced.**
+**53 checks passed; 0 failed; 0 integration gaps reproduced.**
 
 Rerun from the project root: `.venv/bin/python scripts/check-workflow.py`.
 The harness creates fresh disposable Git projects and stops its watcher on exit.
@@ -16,11 +16,11 @@ without stealing focus*, *Panel toggles closed*) asserted the pane that the UI p
 the rows that replace them are named below. Pipes inside an observation are written `/` so the
 table stays a table: `str / None` is `str | None`.
 
-Artifacts: `/tmp/devcompanion-check-91ivji5q`
+Artifacts: `/tmp/devcompanion-check-w8en19i2`
 
 | Result | Scenario | Observation |
 |---|---|---|
-| PASS | Existing unit suite | 99 passed in 4.44s |
+| PASS | Existing unit suite | 104 passed in 4.45s |
 | PASS | Canonical text agrees across Lua, Python and disk | 11/11 fixture cases hash identically in the adapter, the engine, and the file Neovim writes |
 | PASS | Baseline | No breaking finding for unchanged committed files |
 | PASS | Breaking signature | 2 call site(s): 2 break, 0 unsure, 0 fit |
@@ -42,7 +42,7 @@ Artifacts: `/tmp/devcompanion-check-91ivji5q`
 | PASS | Unsaved analysis says so | unsaved buffer; the file on disk still holds the previous version |
 | PASS | Unsaved edit runs no tests | pytest reads the working tree, so it is not run for buffer-only content |
 | PASS | Adapter and engine agree on the buffer hash | adapter 349c879ed44bc4be, engine 349c879ed44bc4be, finding depends on 349c879ed44bc4be |
-| PASS | Protocol v2 fields survive intake | dirty=True session=6aa7faad-b628f doc_version=5 language='python' origin=editor source=nvim; buffer text stays in the snapshot store, not the event log |
+| PASS | Protocol v2 fields survive intake | dirty=True session=6aa7ffac-bbed7 doc_version=5 language='python' origin=editor source=nvim; buffer text stays in the snapshot store, not the event log |
 | PASS | Engine reports the unsaved buffer | {"state": "idle", "dirty_buffers": ["calc.py"], "findings": 2} |
 | PASS | Findings published for the unsaved edit | 2 caller_affected finding(s), each marked as resting on buffer content |
 | PASS | Panel leads with a count, not engine metadata | first line '2 problems'; engine fields drawn: 0 |
@@ -53,7 +53,9 @@ Artifacts: `/tmp/devcompanion-check-91ivji5q`
 | PASS | Panel opens only when asked, as a focused float | no window appeared while findings arrived; :CompanionPanel opened a float and moved the cursor into it |
 | PASS | Closing the panel gives the cursor back | q closed it and returned to the code window; :CompanionPanel twice toggles it |
 | PASS | Before :CompanionStart the panel says it is not observing | not observing this workspace / :CompanionStart to begin |
-| PASS | A sticky panel stays in view | :CompanionPanelStick opened it without taking the cursor; it survived leaving and a jump; unsticking closed it — {"survived_leaving": true, "survived_jump": true, "opened": true, "unstick_closed": true, "stayed_in_code": true, "entered": true, "no_pseudo_root": true} |
+| PASS | A pinned panel stays in view | :CompanionPanelPin opened it without taking the cursor; it survived leaving and a jump; unpinning closed it — {"unstick_closed": true, "opened": true, "stayed_in_code": true, "entered": true, "follow_closed": true, "follow_opened": true, "survived_leaving": true, "survived_jump": true, "source_marked": true, "cursor_hidden": true, "no_pseudo_root": true, "source_cleared": true, "cursor_restored": true} |
+| PASS | Pinned panel and code are linked | the problem on the code cursor's line opened in the panel with the cursor left in the code, and moving off restored the problem that had been open before; the problem selected in the panel was marked in the code until the panel lost focus — {"follow_opened": true, "follow_closed": true, "source_marked": true, "source_cleared": true} |
+| PASS | The cursor hides inside the panel | guicursor carries the hidden-cursor highlight while the panel has focus, and is restored exactly when it loses it |
 | PASS | Statusline carries the count | '◉ 2' |
 | PASS | Panel survives a multi-line diagnostic | add() expects str / None, got int |
 | PASS | One mistake reported twice is one problem | '3 problems · 2 diagnostics', and the row reads 'add() expects str / None, got int'; the language server's wording stays behind `d` |
@@ -64,11 +66,11 @@ Artifacts: `/tmp/devcompanion-check-91ivji5q`
 | PASS | Saved tests are labelled as saved-revision evidence | saved files only |
 | PASS | Test findings declare their revision limit | failed: 1 failed in 0.01s |
 | PASS | Editor departure drops its overlays | an editor that quits stops being credited with unsaved content |
-| PASS | A clean restart resumes at the offset: no reset, nothing re-read | {"malformed": 0, "offset": 4571, "resets": 0, "resumed_at": 4571, "skipped_known": 0} |
+| PASS | A clean restart resumes at the offset: no reset, nothing re-read | {"malformed": 0, "offset": 4572, "resets": 0, "resumed_at": 4572, "skipped_known": 0} |
 | PASS | A clean restart does not touch events.jsonl or state.json | 20 line(s) in events.jsonl before and after |
-| PASS | The restarted engine's intake block updates without any new event | {"malformed": 0, "offset": 4571, "resets": 1, "resumed_at": 0, "skipped_known": 12} |
+| PASS | The restarted engine's intake block updates without any new event | {"malformed": 0, "offset": 4572, "resets": 1, "resumed_at": 0, "skipped_known": 12} |
 | PASS | Restart does not reprocess events.jsonl or state.json | 20 line(s) in events.jsonl before and after the restart, evidence unchanged |
-| PASS | engine.json reports the intake block | {"malformed": 0, "offset": 4571, "resets": 1, "resumed_at": 0, "skipped_known": 12} |
+| PASS | engine.json reports the intake block | {"malformed": 0, "offset": 4572, "resets": 1, "resumed_at": 0, "skipped_known": 12} |
 | PASS | The restarted engine saw the rotated file's old events and declined them | skipped_known=12, resets=1 — re-read, not re-observed for the first time |
 | PASS | A new edit after the restart is still picked up and produces a finding | 2 call site(s): 2 break, 0 unsure, 0 fit |
 
@@ -91,9 +93,14 @@ Artifacts: `/tmp/devcompanion-check-91ivji5q`
   `:CompanionPanel` from inside the panel closes it.
 - **Before :CompanionStart the panel says it is not observing** — no problem count and no
   engine notice over a store nothing has filled.
-- **A sticky panel stays in view** — `:CompanionPanelStick` opens it without taking the cursor;
+- **A pinned panel stays in view** — `:CompanionPanelPin` opens it without taking the cursor;
   `:CompanionStart` run from inside it observes the real workspace, not `companion:/`; it
-  survives the cursor leaving and a jump; unsticking an unfocused panel closes it.
+  survives the cursor leaving and a jump; unpinning an unfocused panel closes it.
+- **Pinned panel and code are linked** — the problem on the code cursor's line opens in the
+  panel while the cursor stays in the code, and moving off restores the problem that was open
+  before; the problem selected in the panel is marked in the code until the panel loses focus.
+- **The cursor hides inside the panel** — `guicursor` carries the hidden-cursor highlight while
+  the panel has focus and is restored exactly when it loses it.
 - **Statusline carries the count** — `statusline()` returns `◉ N` while an engine is answering.
 - **One mistake reported twice is one problem** — two basedpyright messages about one call, one
   of them several lines long, draw as a single row reading `add() expects str | None, got int`,

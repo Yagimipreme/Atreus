@@ -28,10 +28,10 @@ cmd("CompanionPanel", function()
   require("companion").toggle()
 end, { desc = "Toggle the companion panel" })
 
--- Sticky: the panel stays open when the cursor leaves it and after a jump.
-cmd("CompanionPanelStick", function()
-  require("companion").stick()
-end, { desc = "Toggle whether the companion panel stays open" })
+-- Pinned: the panel stays open when the cursor leaves it and after a jump, and follows the code.
+cmd("CompanionPanelPin", function()
+  require("companion").pin()
+end, { desc = "Pin or unpin the companion panel" })
 
 cmd("CompanionErrors", function()
   require("companion").panel("errors")

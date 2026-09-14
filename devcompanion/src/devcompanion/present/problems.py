@@ -6,10 +6,15 @@ be assigned to parameter sep". Echoing both is two rows for one problem, each wo
 checker. This module does the two things that make the panel an interpretation rather than a
 second copy of the sign column:
 
-  normalise  one message -> one short sentence, plus the facts it names (symbol, expected, got),
-             so the editor can colour the mismatch instead of colouring a whole line red
+  normalise  one message -> one short sentence, plus the facts it names, so the editor can show
+             what the code has against what it needs instead of colouring a whole line red
   group      messages about the same mistake -> one problem, keeping every raw message as
              evidence, so nothing is lost and all of it is one keypress away
+
+Facts use one small vocabulary, so a developer learns to read the block under an opened problem
+at a glance. What the code has: `got`, `found`, `returned`, `missing`. What it needs:
+`expected`, `required`. Where: `parameter`, `operator`, `with`, `left`, `right`, `module`. And
+`symbol`, the name the sentence is about.
 
 Deterministic and table-driven. A message no rule recognises keeps its own first line. A model
 may later rewrite sentences; it would not replace this, because the grouping and the facts are
@@ -59,21 +64,51 @@ def simplify_type(t: str) -> str:
     return t
 
 
+def may_be_none(t: str) -> bool:
+    return bool(re.search(r"(^|\|)\s*None\s*(\||$)", t)) or t.startswith("Optional[")
+
+
 def _argument(m: re.Match) -> Reading:
     got, parameter, expected, function = simplify_type(m[1]), m[2], m[3], m[4]
+    if may_be_none(got) and not may_be_none(expected):
+        return Reading(f"possible None passed to {function}()",
+                       {"symbol": f"{function}()", "found": got, "required": expected,
+                        "parameter": parameter}, specificity=3)
     return Reading(f"{function}() expects {expected}, got {got}",
-                   {"symbol": f"{function}()", "parameter": parameter,
-                    "expected": expected, "got": got}, specificity=3)
+                   {"symbol": f"{function}()", "got": got, "expected": expected,
+                    "parameter": parameter}, specificity=3)
+
+
+def _operator(m: re.Match) -> Reading:
+    op, left, right = m[1], simplify_type(m[2]), simplify_type(m[3])
+    for side, other in ((left, right), (right, left)):
+        if may_be_none(side):
+            return Reading(f"possible None used with {op}",
+                           {"found": side, "operator": op, "with": other}, specificity=3)
+    return Reading(f"{op} not supported between {left} and {right}",
+                   {"operator": op, "left": left, "right": right}, specificity=3)
 
 
 def _assignment(m: re.Match) -> Reading:
     got = simplify_type(m[1])
-    return Reading(f"expected {m[2]}, got {got}", {"expected": m[2], "got": got}, specificity=2)
+    return Reading(f"expected {m[2]}, got {got}", {"got": got, "expected": m[2]}, specificity=2)
+
+
+def _returned(m: re.Match) -> Reading:
+    got = simplify_type(m[1])
+    return Reading(f"returns {got}, expected {m[2]}", {"returned": got, "expected": m[2]},
+                   specificity=2)
 
 
 def _attribute(m: re.Match) -> Reading:
     owner = simplify_type(m[2])
+    if may_be_none(owner):
+        return Reading(f"{m[1]} accessed on possible None", {"symbol": m[1], "found": owner}, 3)
     return Reading(f"{owner} has no attribute {m[1]}", {"symbol": m[1], "got": owner}, specificity=2)
+
+
+def _none(action: str) -> object:
+    return lambda m: Reading(f"possible None {action}", {"found": "None"}, specificity=3)
 
 
 # Searched in order over the whole flattened message, so a specific rule wins over a general one
@@ -81,14 +116,25 @@ def _attribute(m: re.Match) -> Reading:
 RULES: list[tuple[re.Pattern, object]] = [(re.compile(p), build) for p, build in [
     (r'Argument of type "(.+?)" cannot be assigned to parameter "(\w+)" of type "(.+?)" '
      r'in function "(\w+)"', _argument),
-    (r'Type "(.+?)" is not assignable to (?:declared|return) type "(.+?)"', _assignment),
+    (r'Operator "(.+?)" not supported for types "(.+?)" and "(.+?)"', _operator),
+    (r'Operator "(.+?)" not supported for "None"',
+     lambda m: Reading(f"possible None used with {m[1]}", {"found": "None", "operator": m[1]}, 3)),
+    (r'Type "(.+?)" is not assignable to return type "(.+?)"', _returned),
+    (r'Type "(.+?)" is not assignable to declared type "(.+?)"', _assignment),
+    (r'"(\w+)" is not a known attribute of module "(.+?)"',
+     lambda m: Reading(f"{m[2]} has no attribute {m[1]}", {"symbol": m[1], "module": m[2]}, 2)),
+    (r'"(\w+)" is not a known attribute of "(None)"', _attribute),
     (r'Cannot access attribute "(\w+)" for class "(.+?)"', _attribute),
+    (r'Object of type "None" is not subscriptable', _none("subscripted")),
+    (r'Object of type "None" cannot be called', _none("called")),
+    (r'Object of type "None" cannot be used as iterable value', _none("iterated")),
     (r'No overloads for "(\w+)" match the provided arguments',
      lambda m: Reading(f"{m[1]}() has no overload for these arguments", {"symbol": f"{m[1]}()"}, 1)),
     (r'Argument missing for parameter "(\w+)"',
-     lambda m: Reading(f"missing argument {m[1]}", {"expected": m[1]}, 2)),
+     lambda m: Reading(f"missing argument {m[1]}", {"missing": m[1]}, 2)),
     (r'Arguments missing for parameters (.+)',
-     lambda m: Reading(f"missing arguments {m[1].replace(chr(34), '')}", {}, 2)),
+     lambda m: Reading(f"missing arguments {m[1].replace(chr(34), '')}",
+                       {"missing": m[1].replace(chr(34), "")}, 2)),
     (r'Expected (\d+) positional arguments?',
      lambda m: Reading(f"too many positional arguments, expects {m[1]}", {"expected": m[1]}, 2)),
     (r'No parameter named "(\w+)"',
@@ -98,7 +144,7 @@ RULES: list[tuple[re.Pattern, object]] = [(re.compile(p), build) for p, build in
     (r'"(\w+)" is possibly unbound',
      lambda m: Reading(f"{m[1]} may be unbound here", {"symbol": m[1]}, 2)),
     (r'Import "(.+?)" could not be resolved',
-     lambda m: Reading(f"cannot import {m[1]}", {"symbol": m[1]}, 2)),
+     lambda m: Reading(f"cannot import {m[1]}", {"missing": m[1]}, 2)),
     (r'Expected module name',
      lambda m: Reading("import is missing its module name", {}, 1, topic="import")),
     (r'Expected "import"',

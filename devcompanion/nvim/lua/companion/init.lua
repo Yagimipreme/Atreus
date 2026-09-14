@@ -17,7 +17,7 @@ function M.setup(opts)
 end
 
 -- The workspace a command is about. A real file names it. Anything else -- the panel itself, a
--- terminal, a file tree -- does not, and with a sticky panel the cursor is often in one; then the
+-- terminal, a file tree -- does not, and with a pinned panel the cursor is often in one; then the
 -- panel's own workspace, or the one already observed, stands in.
 local function current_root()
   local buf = vim.api.nvim_get_current_buf()
@@ -72,12 +72,23 @@ function M.start(root)
     consumed = n
   end)
 
-  -- An open panel follows the developer: a save can retire a stale mark, a sticky panel's notice
+  -- An open panel follows the developer: a save can retire a stale mark, a pinned panel's notice
   -- is about whichever buffer they moved to, and a resize moves its right edge. Free when closed.
+  local group = vim.api.nvim_create_augroup("companion:panel:" .. root, { clear = true })
   vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost", "VimResized" }, {
-    group = vim.api.nvim_create_augroup("companion:panel:" .. root, { clear = true }),
+    group = group,
     callback = function()
       panel.refresh(root)
+    end,
+  })
+  -- A pinned panel opens the problem on the line the cursor is on. The panel does nothing unless
+  -- it is open and the cursor is elsewhere, so this costs one check per move while coding.
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    group = group,
+    callback = function(a)
+      if panel.is_open() then
+        panel.follow(root, a.buf, vim.api.nvim_win_get_cursor(0)[1])
+      end
     end,
   })
 
@@ -121,13 +132,13 @@ function M.toggle(only)
   end
 end
 
-function M.stick()
+function M.pin()
   if panel.is_open() then
-    return panel.set_sticky()
+    return panel.set_pinned()
   end
   local root = current_root()
   if root then
-    panel.set_sticky(nil, root)
+    panel.set_pinned(nil, root)
   end
 end
 

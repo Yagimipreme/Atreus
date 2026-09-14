@@ -1,40 +1,70 @@
 -- Layer 3b: THE PANEL. The companion's quick-help surface: a small float at the right edge of
 -- the editor holding a short, prioritised list of problems.
 --
--- One line per problem, one inspected problem at a time, raw evidence only on request. The
+-- One problem is two lines, one inspected problem at a time, raw evidence only on request. The
 -- engine has already grouped the language server's messages into problems and said each as a
 -- sentence with its facts named (present/problems.py); this module lays that out and spends
--- colour only where the eye should go: the symbol, what was expected, what was there instead.
+-- colour only where the eye should go: the symbol, what the code needs, what it has instead.
 --
 -- It is a view, never a source: it renders the findings store and owns only its window, which
 -- problem is inspected, and where the cursor is. Engine metadata is not here; see info.lua.
 --
 -- It opens only when the developer asks. Having been asked, it takes focus -- its keys act
 -- inside it -- and it closes on q, a jump, or leaving it, handing the cursor back to the window
--- it was opened from. Sticky (`ui.sticky`, :CompanionPanelStick, `s`) keeps it open on leaving
--- and after a jump, for when it should stay in view while coding.
+-- it was opened from. Pinned (`ui.pinned`, :CompanionPanelPin, `p`) it stays open on leaving and
+-- after a jump, and follows the code: the problem on the cursor's line opens in place, and the
+-- problem selected in the panel is highlighted in the code. Nothing moves the cursor but ↵.
 local config = require("companion.config")
+local util = require("companion.util")
 local store = require("companion.findings")
 local float = require("companion.float")
 
 local M = {}
 
-local state = { buf = nil, win = nil, root = nil, origin = nil, only = nil, sticky = nil }
+local state = { buf = nil, win = nil, root = nil, origin = nil, only = nil, pinned = nil }
 local open = { id = nil, raw = false } -- the one inspected problem, and whether its raw evidence shows
-local items = {}                        -- as drawn: { first = lnum, last = lnum, finding = f }
+local items = {}                        -- as drawn: { first, head, last, finding }
+-- Following the code cursor: the problem it opened, what was open before it did, and the line it
+-- last looked at -- so moving within a line does no work and moving off restores what was there.
+local follow = { id = nil, previous = nil, at = nil }
+
+local function unfollow()
+  follow.id, follow.previous, follow.at = nil, nil, nil
+end
 local footer_key = nil                  -- the footer last applied; cursor moves redraw it only on change
+local saved_guicursor = nil             -- 'guicursor' while the panel hides the cursor
+local source_buf = nil                  -- the code buffer carrying the selected problem's range
 local selection = vim.api.nvim_create_namespace("companion.selection")
+local source_ns = vim.api.nvim_create_namespace("companion.source")
 
 -- " ▸ E  " -- marker, letter, then the place and the sentence from this column.
 local INDENT = 6
 local PAD = string.rep(" ", INDENT)
-local LABEL = 11 -- "diagnostic" and a space
+local LABEL = 11 -- "defined in" and a space
 local LETTER = { test_result = "T", caller_affected = "C", diagnostic_context = "E" }
-local FACT_HL = { symbol = "CompanionSymbol", expected = "CompanionExpected", got = "CompanionGot" }
 local SKIP_CAPTURE = { spell = true, nospell = true, conceal = true }
+
+-- One vocabulary for what a problem is made of, in one order, so the block under an opened
+-- problem reads the same every time: what the code has (red), what it needs (green), where.
+local FACT_ROWS = {
+  { "got", "CompanionGot" }, { "found", "CompanionGot" }, { "returned", "CompanionGot" },
+  { "missing", "CompanionGot" }, { "expected", "CompanionExpected" },
+  { "required", "CompanionExpected" }, { "operator" }, { "with" }, { "left" }, { "right" },
+  { "parameter" }, { "argument" }, { "function", "CompanionSymbol" }, { "module" },
+  { "defined in" },
+}
+local SENTENCE_HL = {
+  symbol = "CompanionSymbol", ["function"] = "CompanionSymbol",
+  got = "CompanionGot", found = "CompanionGot", returned = "CompanionGot", missing = "CompanionGot",
+  expected = "CompanionExpected", required = "CompanionExpected",
+}
 
 function M.is_open()
   return state.win ~= nil and vim.api.nvim_win_is_valid(state.win)
+end
+
+local function focused()
+  return M.is_open() and vim.api.nvim_get_current_win() == state.win
 end
 
 -- The workspace the panel was last opened for, or nil.
@@ -42,16 +72,12 @@ function M.root()
   return state.root
 end
 
-local function focused()
-  return M.is_open() and vim.api.nvim_get_current_win() == state.win
-end
-
 -- The session's choice when one was made, otherwise the configured default.
-function M.is_sticky()
-  if state.sticky ~= nil then
-    return state.sticky
+function M.is_pinned()
+  if state.pinned ~= nil then
+    return state.pinned
   end
-  return config.options.ui.sticky == true
+  return config.options.ui.pinned == true
 end
 
 local function inner_width()
@@ -106,27 +132,37 @@ local function target(f)
   end
 end
 
--- The line a finding points at, as it is now, without its indent, and the caret's display
--- offset into it. nil when there is no line to show.
-local function excerpt(root, loc)
+-- The line a location points at, as it is now: from the buffer when it is loaded, else the file.
+local function source_line(root, loc)
   if not (loc and loc.path and loc.line) then
     return nil
   end
   local abs = root .. "/" .. loc.path
-  local text
   local buf = vim.fn.bufnr(abs)
   if buf ~= -1 and vim.api.nvim_buf_is_loaded(buf) then
-    text = vim.api.nvim_buf_get_lines(buf, loc.line - 1, loc.line, false)[1]
+    return vim.api.nvim_buf_get_lines(buf, loc.line - 1, loc.line, false)[1]
   elseif vim.fn.filereadable(abs) == 1 then
-    text = vim.fn.readfile(abs, "", loc.line)[loc.line]
+    return vim.fn.readfile(abs, "", loc.line)[loc.line]
   end
-  if not text or not text:find("%S") then
-    return nil
+end
+
+-- The byte range a location covers on its own line: to its end when that is on the same line,
+-- to the end of the line when it runs on, otherwise the token at its column.
+local function span(text, loc)
+  if not loc.col then
+    return 0, #text
   end
-  local indent = #text:match("^%s*")
-  local body = text:sub(indent + 1)
-  local caret = loc.col and float.width(body:sub(1, math.max(0, loc.col - 1 - indent))) or nil
-  return body, caret
+  local s = math.min(math.max(loc.col - 1, 0), #text)
+  local e
+  if loc.end_line == loc.line and loc.end_col and loc.end_col > loc.col then
+    e = loc.end_col - 1
+  elseif loc.end_line and loc.end_line > loc.line then
+    e = #text
+  else
+    local word = text:sub(s + 1):match("^[%w_]+")
+    e = s + (word and #word or 1)
+  end
+  return s, math.min(math.max(e, s + 1), #text)
 end
 
 -- ---------------------------------------------------------------- rows
@@ -135,7 +171,7 @@ end
 -- because sentences end with it; the others at their first.
 local function fact_spans(text, facts)
   local spans = {}
-  for key, group in pairs(FACT_HL) do
+  for key, group in pairs(SENTENCE_HL) do
     local value = type(facts) == "table" and facts[key] or nil
     if type(value) == "string" and value ~= "" then
       local s, e = text:find(value, 1, true)
@@ -155,12 +191,16 @@ local function fact_spans(text, facts)
   return spans
 end
 
--- The sentence, wrapped rather than cut, with each fact in its own colour. Everything else in
--- it stays plain: a sentence that is all red tells the eye nothing.
-local function sentence_rows(c, text, facts, width, dim)
+-- The sentence with each fact in its own colour; everything else plain, because a sentence that
+-- is all red tells the eye nothing. Collapsed it is one line, cut if it must be; opened, whole.
+local function sentence_rows(c, text, facts, width, dim, one_line)
+  local room = width - INDENT - 1
+  if one_line then
+    text = float.truncate(text, room)
+  end
   local spans = fact_spans(text, facts)
   local offset = 0
-  for _, l in ipairs(float.wrap(text, width - INDENT - 1)) do
+  for _, l in ipairs(float.wrap(text, room)) do
     local start = text:find(l, offset + 1, true) or (offset + 1)
     local stop = start + #l - 1
     local parts, pos = { { PAD } }, start
@@ -182,13 +222,16 @@ local function sentence_rows(c, text, facts, width, dim)
   end
 end
 
--- The line of code, highlighted by Tree-sitter when a parser for it is installed, and a caret
--- under the column the problem is at. Returns whether there was a line to show.
+-- The line of code, syntax-highlighted by Tree-sitter when a parser for it is installed, with
+-- the problem's own range in the colour of what is wrong on top, and a caret under it. Returns
+-- whether there was a line to show.
 local function code_rows(c, root, loc, width)
-  local body, caret = excerpt(root, loc)
-  if not body then
+  local text = source_line(root, loc)
+  if not text or not text:find("%S") then
     return false
   end
+  local indent = #text:match("^%s*")
+  local body = text:sub(indent + 1)
   local room = width - INDENT - 1
   local shown = float.truncate(body, room)
   local row = c:add({ { PAD }, { shown } })
@@ -205,13 +248,19 @@ local function code_rows(c, root, loc, width)
         local name = query.captures[id]
         local sr, sc, er, ec = node:range()
         if sr == 0 and not SKIP_CAPTURE[name] and name:sub(1, 1) ~= "_" then
-          c:mark(row, INDENT + sc, INDENT + (er == 0 and ec or #shown), "@" .. name .. "." .. lang)
+          c:mark(row, INDENT + sc, INDENT + (er == 0 and ec or #shown), "@" .. name .. "." .. lang, 100)
         end
       end
     end)
   end
-  if caret and caret < room then
-    c:add({ { PAD .. string.rep(" ", caret) }, { "^", "CompanionGot" } })
+  if loc.col then
+    local s, e = span(text, loc)
+    s, e = math.max(0, s - indent), math.max(0, e - indent)
+    c:mark(row, INDENT + s, INDENT + e, "CompanionGot", 200)
+    local caret = float.width(body:sub(1, s))
+    if caret < room then
+      c:add({ { PAD .. string.rep(" ", caret) }, { "^", "CompanionGot" } })
+    end
   end
   return true
 end
@@ -248,24 +297,22 @@ local function raw_rows(c, f, stale, width)
   end
 end
 
--- ↵: the problem, not its paperwork. The code, the mismatch, what changed, a likely fix when a
--- model offered one.
+-- ↵: the problem, not its paperwork. The code, what it has against what it needs, what changed,
+-- a likely fix when a model offered one.
 local function inspected(c, root, f, stale, width)
   c:gap()
   if code_rows(c, root, f.location, width) then
     c:gap()
   end
-  local facts = f.facts or {}
-  if facts.got or facts.expected then
-    if facts.got then
-      kv(c, "got", facts.got, "CompanionGot", width)
+  local facts, any = f.facts or {}, false
+  for _, row in ipairs(FACT_ROWS) do
+    local value = facts[row[1]]
+    if type(value) == "string" and value ~= "" then
+      kv(c, row[1], value, row[2], width)
+      any = true
     end
-    if facts.expected then
-      kv(c, "expected", facts.expected, "CompanionExpected", width)
-    end
-    if facts.parameter then
-      kv(c, "parameter", facts.parameter, nil, width)
-    end
+  end
+  if any then
     c:gap()
   end
   if f.kind == "caller_affected" and f.title and f.title ~= "" then
@@ -294,6 +341,7 @@ local function inspected(c, root, f, stale, width)
   end
 end
 
+-- Returns the problem's first line and the last line of its two-line head.
 local function item(c, root, entry, width)
   local f, stale = entry.finding, entry.stale
   local dim = stale and "CompanionMuted" or nil
@@ -314,11 +362,12 @@ local function item(c, root, entry, width)
     table.insert(row, { tag, "CompanionMuted" })
   end
   local first = c:add(row)
-  sentence_rows(c, sentence(f), f.facts, width, dim)
+  sentence_rows(c, sentence(f), f.facts, width, dim, not is_open)
+  local head = #c.lines
   if is_open then
     inspected(c, root, f, stale, width)
   end
-  return first
+  return first, head
 end
 
 -- ---------------------------------------------------------------- the whole panel
@@ -338,7 +387,6 @@ local function render()
   end
 
   local list = store.issues(root, state.only)
-
   local still_there, diag_problems, diag_messages = false, 0, 0
   for _, entry in ipairs(list) do
     still_there = still_there or entry.finding.id == open.id
@@ -352,7 +400,7 @@ local function render()
   end
 
   -- Problems, not messages. When grouping absorbed some, say how many machine messages the
-  -- count stands for: that difference is the point of the panel.
+  -- count stands for, dimmed: the problem count is the human number, this one supports it.
   local n = #list
   local count = n == 0 and "no problems" or (n == 1 and "1 problem" or (n .. " problems"))
   local detail = diag_messages > diag_problems and (" · " .. diag_messages .. " diagnostics") or ""
@@ -400,9 +448,9 @@ local function render()
       c:add({ { PAD }, { "… " .. (#list - max) .. " more", "CompanionMuted" } })
       break
     end
-    local first = item(c, root, entry, width)
+    local first, head = item(c, root, entry, width)
     c:trim()
-    table.insert(items, { first = first, last = #c.lines, finding = entry.finding })
+    table.insert(items, { first = first, head = head, last = #c.lines, finding = entry.finding })
   end
 
   float.draw(state.buf, c)
@@ -411,8 +459,8 @@ end
 
 local function title()
   local chunks = { { " companion ", "CompanionTitle" } }
-  if M.is_sticky() then
-    table.insert(chunks, { "· sticky ", "CompanionMuted" })
+  if M.is_pinned() then
+    table.insert(chunks, { "📌 ", "CompanionMuted" })
   end
   return chunks
 end
@@ -438,7 +486,7 @@ local function footer()
   elseif cur and cur.finding.id == open.id then
     keys = { { "↵", "go to" }, { "d", open.raw and "hide raw" or "raw" }, { "q", "close" } }
   else
-    keys = { { "↵", "inspect" }, { "s", M.is_sticky() and "unstick" or "stick" }, { "q", "close" } }
+    keys = { { "↵", "inspect" }, { "p", M.is_pinned() and "unpin" or "pin" }, { "q", "close" } }
   end
   local chunks = {}
   for _, k in ipairs(keys) do
@@ -471,7 +519,54 @@ local function place_window(height)
   end
 end
 
--- The selection marker and the footer follow the cursor, without a redraw of the list.
+-- ---------------------------------------------------------------- cursor and code
+
+-- Inside the panel the terminal cursor is hidden: the selected problem's background and marker
+-- say where you are, and a block cursor on top of them reads as a text cursor in a text buffer.
+-- Normal and visual mode only, so a command line typed from the panel still shows its cursor.
+local function hide_cursor()
+  if saved_guicursor == nil then
+    saved_guicursor = vim.o.guicursor
+    vim.o.guicursor = (saved_guicursor ~= "" and (saved_guicursor .. ",") or "") .. "n-v:block-CompanionHiddenCursor"
+  end
+end
+
+local function show_cursor()
+  if saved_guicursor ~= nil then
+    vim.o.guicursor = saved_guicursor
+    saved_guicursor = nil
+  end
+end
+
+local function clear_source()
+  if source_buf and vim.api.nvim_buf_is_valid(source_buf) then
+    vim.api.nvim_buf_clear_namespace(source_buf, source_ns, 0, -1)
+  end
+  source_buf = nil
+end
+
+-- Panel -> code: the selected problem's range, highlighted where it is, without moving any
+-- cursor. Only while the panel has focus; while coding, the line under the cursor needs no mark.
+local function mark_source(f)
+  clear_source()
+  local loc = f and f.location
+  if not (focused() and loc and loc.path and loc.line) then
+    return
+  end
+  local buf = vim.fn.bufnr(state.root .. "/" .. loc.path)
+  if buf == -1 or not vim.api.nvim_buf_is_loaded(buf) or loc.line > vim.api.nvim_buf_line_count(buf) then
+    return
+  end
+  local text = vim.api.nvim_buf_get_lines(buf, loc.line - 1, loc.line, false)[1] or ""
+  local s, e = span(text, loc)
+  if e > s then
+    vim.api.nvim_buf_set_extmark(buf, source_ns, loc.line - 1, s, { end_col = e, hl_group = "CompanionSource", priority = 250 })
+    source_buf = buf
+  end
+end
+
+-- The selected problem gets a quiet background on its two-line head and a marker; its range is
+-- marked in the code; the footer follows. None of it redraws the list.
 local function mark_selection()
   if not M.is_open() then
     return
@@ -479,11 +574,15 @@ local function mark_selection()
   vim.api.nvim_buf_clear_namespace(state.buf, selection, 0, -1)
   local cur = item_at(vim.api.nvim_win_get_cursor(state.win)[1])
   if cur then
+    for lnum = cur.first, cur.head do
+      vim.api.nvim_buf_set_extmark(state.buf, selection, lnum - 1, 0, { line_hl_group = "CompanionSelected", priority = 10 })
+    end
     vim.api.nvim_buf_set_extmark(state.buf, selection, cur.first - 1, 1, {
       virt_text = { { cur.finding.id == open.id and "▼" or "▸", "CompanionKey" } },
       virt_text_pos = "overlay",
     })
   end
+  mark_source(cur and cur.finding)
   local keys = footer()
   local key = vim.inspect(keys)
   if key ~= footer_key then
@@ -492,7 +591,7 @@ local function mark_selection()
   end
 end
 
--- Put the cursor on a problem's first row, and scroll so as much of it as fits is in view.
+-- Put the panel's cursor on a problem's first row, and scroll so as much of it as fits is in view.
 local function show_item(id)
   for _, it in ipairs(items) do
     if it.finding.id == id then
@@ -536,6 +635,9 @@ end
 function M.close()
   local win = state.win
   state.win = nil
+  show_cursor()
+  clear_source()
+  unfollow()
   if not (win and vim.api.nvim_win_is_valid(win)) then
     return
   end
@@ -554,7 +656,7 @@ function M.jump()
     return
   end
   local root = state.root
-  if not M.is_sticky() then
+  if not M.is_pinned() then
     M.close()
   elseif state.origin and vim.api.nvim_win_is_valid(state.origin) and state.origin ~= state.win then
     vim.api.nvim_set_current_win(state.origin)
@@ -579,6 +681,7 @@ function M.inspect()
     return M.jump()
   end
   open.id, open.raw = it.finding.id, false
+  unfollow()
   M.refresh()
   show_item(it.finding.id)
 end
@@ -594,6 +697,7 @@ function M.toggle_raw()
   else
     open.id, open.raw = it.finding.id, true
   end
+  unfollow()
   M.refresh()
   show_item(it.finding.id)
 end
@@ -605,6 +709,7 @@ function M.escape()
   end
   local id = open.id
   open.id, open.raw = nil, false
+  unfollow()
   M.refresh()
   show_item(id)
 end
@@ -626,6 +731,50 @@ function M.step(delta)
   mark_selection()
 end
 
+-- Code -> panel. With the panel open and the cursor in the code (pinned), the problem on the
+-- cursor's line is opened in place, and moving off puts back whatever was open before. A
+-- problem that is already open -- by hand or by following -- is only selected, never taken
+-- away. Called on CursorMoved.
+function M.follow(root, buf, lnum)
+  if not M.is_open() or focused() or state.root ~= root then
+    return
+  end
+  local rel = util.relative(root, vim.api.nvim_buf_get_name(buf))
+  local at = rel .. ":" .. lnum
+  if at == follow.at then
+    return
+  end
+  follow.at = at
+  local match
+  for _, it in ipairs(items) do
+    local loc = it.finding.location
+    if loc and loc.path == rel and loc.line == lnum then
+      match = it
+      break
+    end
+  end
+  if match and open.id == match.finding.id then
+    show_item(match.finding.id)
+  elseif match then
+    if follow.id == nil then
+      follow.previous = open.id
+    end
+    follow.id = match.finding.id
+    open.id, open.raw = follow.id, false
+    M.refresh()
+    show_item(follow.id)
+  elseif follow.id then
+    if open.id == follow.id then
+      open.id, open.raw = follow.previous, false
+    end
+    follow.id, follow.previous = nil, nil
+    M.refresh()
+    if open.id then
+      show_item(open.id)
+    end
+  end
+end
+
 local function ensure_buffer()
   if state.buf and vim.api.nvim_buf_is_valid(state.buf) then
     return state.buf
@@ -639,17 +788,26 @@ local function ensure_buffer()
   map("d", M.toggle_raw, "raw evidence")
   map("j", function() M.step(1) end, "next problem")
   map("k", function() M.step(-1) end, "previous problem")
-  map("s", function() M.set_sticky() end, "stick or unstick")
+  map("p", function() M.set_pinned() end, "pin or unpin")
   map("r", function() M.refresh() end, "redraw")
   map("q", M.close, "close")
   map("<Esc>", M.escape, "put the problem away, or close")
-  -- Temporary unless sticky: leaving it closes it. Scheduled, because a window cannot be closed
+  vim.api.nvim_create_autocmd("WinEnter", {
+    buffer = buf,
+    callback = function()
+      hide_cursor()
+      mark_selection()
+    end,
+  })
+  -- Temporary unless pinned: leaving it closes it. Scheduled, because a window cannot be closed
   -- from inside the event that is leaving it.
   vim.api.nvim_create_autocmd("WinLeave", {
     buffer = buf,
     callback = function()
+      show_cursor()
+      clear_source()
       vim.schedule(function()
-        if not M.is_sticky() and not focused() then
+        if not M.is_pinned() and not focused() then
           M.close()
         end
       end)
@@ -674,6 +832,7 @@ function M.open(root, only)
   state.origin = vim.api.nvim_get_current_win()
   ensure_buffer()
   place_window(render())
+  hide_cursor()
   if items[1] then
     vim.api.nvim_win_set_cursor(state.win, { items[1].first, 0 })
   end
@@ -689,14 +848,14 @@ function M.toggle(root, only)
   end
 end
 
--- Stick or unstick for this session; nil toggles. Sticking a closed panel opens it without
--- taking the cursor, since the point is to keep it in view while coding. Unsticking a panel the
--- cursor is not in closes it: nothing else would.
-function M.set_sticky(on, root)
+-- Pin or unpin for this session; nil toggles. Pinning a closed panel opens it without taking
+-- the cursor, since the point is to keep it in view while coding. Unpinning a panel the cursor
+-- is not in closes it: nothing else would.
+function M.set_pinned(on, root)
   if on == nil then
-    on = not M.is_sticky()
+    on = not M.is_pinned()
   end
-  state.sticky = on
+  state.pinned = on
   root = root or state.root
   if on and not M.is_open() and root then
     local here = vim.api.nvim_get_current_win()
