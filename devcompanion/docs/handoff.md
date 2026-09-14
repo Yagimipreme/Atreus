@@ -24,15 +24,15 @@ The two halves talk only through files under `<workspace>/.companion/` ([contrac
 
 | | |
 |---|---|
-| Branch | `main` in `~/repos` (that repo tracks only `devcompanion/`), level with `origin/main` at `b5aac42`. No other session has committed since |
+| Branch | `main` in `~/repos` (that repo tracks only `devcompanion/`), level with `origin/main`. Passes 5–7 landed as `026c26f` |
 | Remote | `https://github.com/Yagimipreme/Atreus.git` — **public**. HTTPS through `gh`; SSH has no key |
-| Uncommitted | **passes 5, 6 and 7**: 59 paths. `testing/test.py` is the user's scratch file — leave it. The user commits on request; ask before committing or pushing |
+| Uncommitted | only `testing/test.py`, the user's scratch file — leave it. The user commits on request; ask before committing or pushing |
 | Unit tests | **191 passed** — `.venv/bin/python -m pytest -q` (~31 s; 188 under `tests/`) |
 | Integration | **55 checks passed** — `scripts/check-workflow.py` (~2 min). It configures no model, so it does not exercise checked fixes; `tests/test_engine_fixes.py`, `tests/test_fix_check_project.py` and a tmux run of the panel do |
 | Engine | running detached, pid **1355210**, `--model qwen3-coder:30b`, checked fixes on, holding `.companion/engine.lock` |
 | Ollama | running (system service, 0.33.3); the user allowed its use |
 | Neovim | **the user has not restarted it since the pass 7 Lua changes**: the panel's fix review, merged fixes, and `?` rows for unknown receivers are not yet in their editor |
-| Global KB | pages written and linted, **not published** (see *Knowledge base*; `publish.sh` commits and pushes — ask) |
+| Global KB | published as `47a68c1` (see *Knowledge base*; `publish.sh` commits and pushes — ask before publishing) |
 
 ### Read, in this order
 
@@ -443,18 +443,18 @@ Settled in conversation; do not relitigate without the user.
 - **Passes 1–3** (2026-09-09…): engine skeleton, unsaved-buffer analysis, canonical text, intake
   watermark, local model tier.
 - **Pass 4** (`90c0a98`…`b5aac42`): the panel redesign and its polish.
-- **Pass 5** (uncommitted):
+- **Pass 5** (`026c26f`):
   - scoped the plugin's side effects (autosave, per-buffer debounce)
   - trust levels and local-model scope
   - the checked-fix gate and its corpus; three local models measured
-- **Pass 6** (uncommitted):
+- **Pass 6** (`026c26f`):
   - the provider layer for Claude Code and Codex, and its tripwire
   - fixes on the subscription models
   - a function corpus from the project's own code, and hit rates for sentences, suspicious lines and
     culprits
   - routing chains replayed from stored rows
   - the five prose functions judged on the 30B: explain and plan to the flagship
-- **Pass 7** (uncommitted):
+- **Pass 7** (`026c26f`):
   - **Design:**
     - the prompt design rule
     - the resident specialist against the flagship
@@ -477,8 +477,8 @@ Settled in conversation; do not relitigate without the user.
 
 ## Knowledge base
 
-`~/knowledge-global`, searchable with a bare `qmd query`. Last published at `b9a475d`. Unpublished,
-all linted:
+`~/knowledge-global`, searchable with a bare `qmd query`. Published at `47a68c1`. The pages this
+project added in passes 5–7:
 
 | Page | Collection |
 |---|---|
